@@ -1,0 +1,10 @@
+venv/
+logs/
+build/
+external/
+node_modules/
+.cache/
+*.swp
+*.log
+venv/Lib/site-packages/PySide6/Qt6WebEngineCore.dll
+*.dll
