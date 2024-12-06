@@ -1,0 +1,9 @@
+username2:
+  value: "user123"
+  type: "string"
+  hint: "Введите имя пользователя"
+
+retry_count2:
+  value: 5
+  type: "number"
+  hint: "Количество попыток"

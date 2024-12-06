@@ -1,34 +1,33 @@
 # app/design/IconManager.py
 
-from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor
-from PySide6.QtWidgets import QStyle, QApplication
+from PySide6.QtGui import QIcon, QPixmap, QColor, QPainter, Qt
+from PySide6.QtCore import QSize
 
 
 class IconManager:
     @staticmethod
-    def create_icon(icon_type, color, size=(32, 32)):
+    def create_icon(style_pixmap, color):
         """
-        Создаёт иконку с заданным цветом.
+        Создает иконку с заданным стилем и цветом.
 
-        :param icon_type: Тип иконки (например, QStyle.StandardPixmap).
-        :param color: QColor объект, который нужно применить к иконке.
-        :param size: Размер иконки.
-        :return: QIcon с заданным цветом.
+        :param style_pixmap: Стандартный QStyle.StandardPixmap.
+        :param color: QColor для окраски иконки.
+        :return: QIcon.
         """
-        # Получаем стандартную иконку по типу
-        style = QApplication.instance().style()
-        # Используем QStyle.StandardPixmap
-        icon = style.standardIcon(icon_type)
-
-        # Преобразуем иконку в pixmap
-        pixmap = icon.pixmap(*size)
-
-        # Создаём QPainter для рисования на pixmap
+        pixmap = QPixmap(32, 32)
+        pixmap.fill(Qt.transparent)
         painter = QPainter(pixmap)
-        # Устанавливаем режим для изменения цвета
-        painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
-        # Закрашиваем иконку нужным цветом
-        painter.fillRect(pixmap.rect(), color)
-        painter.end()
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setBrush(color)
+        painter.setPen(Qt.NoPen)
 
-        return QIcon(pixmap)  # Возвращаем результат в виде QIcon
+        # Рисуем стандартный значок
+        icon = QIcon.fromTheme(str(style_pixmap))
+        if not icon.isNull():
+            icon.paint(painter, pixmap.rect())
+        else:
+            # Если значок не найден, рисуем простой круг
+            painter.drawEllipse(pixmap.rect())
+
+        painter.end()
+        return QIcon(pixmap)

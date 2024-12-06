@@ -1,0 +1,40 @@
+username:
+  value: "user123"
+  type: "string"
+  hint: "Введите имя пользователя"
+
+retry_count:
+  value: 5
+  type: "number"
+  hint: "Количество попыток"
+
+session_id:
+  value: null
+  type: "random_number"
+  min: 0
+  max: 5
+  hint: "Сгенерировать случайный ID с диапазоном от 0 до 5"
+
+log_file:
+  value: "C:/Logs/app.log"
+  type: "file"
+  hint: "Укажите путь к файлу логов"
+
+output_directory:
+  value: "C:/Output"
+  type: "folder"
+  hint: "Укажите путь к выходной папке"
+
+supported_formats:
+  value: ["json", "xml", "csv"]
+  type: "list"
+  hint: "Выберите формат"
+  options:
+    - "json"
+    - "xml"
+    - "csv"
+
+check:
+  value: "true"
+  type: "checkbox"
+  hint: "Разрешить выполнение задачи"

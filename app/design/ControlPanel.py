@@ -1,122 +1,85 @@
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QSpacerItem, QSizePolicy, QStyle
+# app/design/ControlPanel.py
+
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QLabel
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QIcon, QPainter, QColor
-from app.design.IconManager import IconManager  # Убедитесь, что путь корректен
+import logging
 
 
 class ControlPanel(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.setStyleSheet("background-color: rgb(50, 50, 50);")
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        logging.debug("ControlPanel: Инициализация.")
+        self.init_ui()
 
-        layout = QHBoxLayout()
+    def init_ui(self):
+        layout = QHBoxLayout(self)
         layout.setSpacing(10)
-        # Прижимаем все элементы к левому краю
-        layout.setAlignment(Qt.AlignLeft)
+        layout.setContentsMargins(10, 10, 10, 10)
 
-        style = self.style()
+        # Создание кнопок
+        self.start_button = QPushButton("Старт")
+        self.stop_button = QPushButton("Стоп")
+        self.pause_button = QPushButton("Пауза")
+        self.resume_button = QPushButton("Возобновить")
 
-        # Создаём иконки с цветами через IconManager
-        self.start_icon = IconManager.create_icon(
-            QStyle.SP_MediaPlay, QColor("green"))
-        self.stop_icon = IconManager.create_icon(
-            QStyle.SP_MediaStop, QColor("darkred"))
-        self.pause_icon = IconManager.create_icon(
-            QStyle.SP_MediaPause, QColor("orange"))
-        self.resume_icon = IconManager.create_icon(
-            QStyle.SP_MediaPlay, QColor("green"))
-        self.status_icon = IconManager.create_icon(
-            QStyle.SP_MediaStop, QColor("gray"))
-        self.error_icon = IconManager.create_icon(
-            QStyle.SP_MediaStop, QColor("darkred"))
+        # Настройка размера кнопок
+        self.start_button.setFixedHeight(30)
+        self.stop_button.setFixedHeight(30)
+        self.pause_button.setFixedHeight(30)
+        self.resume_button.setFixedHeight(30)
 
-        # Кнопка "Запуск" с иконкой "Play"
-        self.start_button = QPushButton()
-        self.start_button.setIcon(self.start_icon)
-        self.start_button.setSizePolicy(
-            QSizePolicy.Preferred, QSizePolicy.Fixed)
-        self.start_button.setToolTip("Запустить выполнение задач.")
-
-        # Кнопка "Стоп" с иконкой "Stop"
-        self.stop_button = QPushButton()
-        self.stop_button.setIcon(self.stop_icon)
-        self.stop_button.setSizePolicy(
-            QSizePolicy.Preferred, QSizePolicy.Fixed)
-        self.stop_button.setEnabled(False)
-        self.stop_button.setToolTip("Остановить выполнение задач.")
-
-        # Кнопка "Пауза" с иконкой "Pause"
-        self.pause_button = QPushButton()
-        self.pause_button.setIcon(self.pause_icon)
-        self.pause_button.setSizePolicy(
-            QSizePolicy.Preferred, QSizePolicy.Fixed)
-        self.pause_button.setEnabled(False)
-        self.pause_button.setToolTip("Приостановить выполнение задач.")
-
-        # Кнопка "Возобновить" с иконкой "Play"
-        self.resume_button = QPushButton()
-        self.resume_button.setIcon(self.resume_icon)
-        self.resume_button.setSizePolicy(
-            QSizePolicy.Preferred, QSizePolicy.Fixed)
-        self.resume_button.setEnabled(False)
-        self.resume_button.setToolTip("Возобновить выполнение задач.")
-
-        # Добавляем пустое пространство между кнопками и статусом
-        spacer = QSpacerItem(
-            40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
-
-        # Кнопка "Статус" с иконкой (по умолчанию Статус ожидания - Стоп)
-        self.status_button = QPushButton()
-        self.status_button.setSizePolicy(
-            QSizePolicy.Preferred, QSizePolicy.Fixed)
-        # Отключаем возможность клика по кнопке
-        # self.status_button.setEnabled(False)
-        self.status_button.setIcon(self.status_icon)
-        self.status_button.setToolTip("Текущий статус выполнения задач.")
-
-        # Добавляем кнопки в макет
+        # Добавление кнопок в макет
         layout.addWidget(self.start_button)
         layout.addWidget(self.stop_button)
         layout.addWidget(self.pause_button)
         layout.addWidget(self.resume_button)
-        layout.addSpacerItem(spacer)  # Добавляем отступ
-        layout.addWidget(self.status_button)
+
+        # Добавление разделителя
+        layout.addStretch()
+
+        # Добавление QLabel для отображения статуса
+        self.status_label = QLabel("Статус: Остановлено")
+        self.status_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.status_label)
 
         self.setLayout(layout)
+        logging.debug("ControlPanel: Интерфейс инициализирован.")
 
-    def update_status(self, status):
+    def update_buttons_on_start(self):
+        self.start_button.setEnabled(False)
+        self.stop_button.setEnabled(True)
+        self.pause_button.setEnabled(True)
+        self.resume_button.setEnabled(False)
+        logging.debug("ControlPanel: Кнопки обновлены после запуска.")
+
+    def update_buttons_on_stop(self):
+        self.start_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
+        self.pause_button.setEnabled(False)
+        self.resume_button.setEnabled(False)
+        logging.debug("ControlPanel: Кнопки обновлены после остановки.")
+
+    def update_buttons_on_pause(self):
+        self.pause_button.setEnabled(False)
+        self.resume_button.setEnabled(True)
+        logging.debug("ControlPanel: Кнопки обновлены после паузы.")
+
+    def update_buttons_on_resume(self):
+        self.pause_button.setEnabled(True)
+        self.resume_button.setEnabled(False)
+        logging.debug("ControlPanel: Кнопки обновлены после возобновления.")
+
+    def update_buttons_on_completed(self):
+        self.start_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
+        self.pause_button.setEnabled(False)
+        self.resume_button.setEnabled(False)
+        logging.debug(
+            "ControlPanel: Кнопки обновлены после завершения всех процессов.")
+
+    def update_status(self, status_message):
         """
-        Обновляет иконку кнопки статуса в зависимости от текущего статуса.
-        Также управляет состоянием кнопок "Пауза" и "Возобновить".
+        Обновляет текст статуса.
         """
-        if status == "Работает":
-            self.status_button.setIcon(self.start_icon)
-            self.status_button.setToolTip("Задачи выполняются")
-            self.pause_button.setEnabled(True)
-            self.resume_button.setEnabled(False)
-        elif status == "На паузе":
-            self.status_button.setIcon(self.pause_icon)
-            self.status_button.setToolTip("Задачи на паузе")
-            self.pause_button.setEnabled(False)
-            self.resume_button.setEnabled(True)
-        elif status == "Ожидание":
-            self.status_button.setIcon(self.stop_icon)
-            self.status_button.setToolTip("Ожидает выполнения")
-            self.start_button.setEnabled(True)
-            self.stop_button.setEnabled(False)
-            self.pause_button.setEnabled(False)
-            self.resume_button.setEnabled(False)
-        elif status == "Ошибка":
-            self.status_button.setIcon(self.error_icon)
-            self.status_button.setToolTip("Произошла ошибка")
-            self.start_button.setEnabled(True)
-            self.stop_button.setEnabled(False)
-            self.pause_button.setEnabled(False)
-            self.resume_button.setEnabled(False)
-        else:
-            self.status_button.setIcon(self.status_icon)
-            self.status_button.setToolTip("Ожидает выполнения")
-            self.start_button.setEnabled(True)
-            self.stop_button.setEnabled(False)
-            self.pause_button.setEnabled(False)
-            self.resume_button.setEnabled(False)
+        self.status_label.setText(f"Статус: {status_message}")
+        logging.debug(f"ControlPanel: Статус обновлён на '{status_message}'.")

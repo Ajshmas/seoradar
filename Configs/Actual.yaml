@@ -1,0 +1,15 @@
+general_settings:
+  execution_count: 1
+  execution_mode: Ограничение
+  thread_count: 1
+tasks_settings:
+  1:
+    retry_count2:
+      hint: Количество попыток
+      type: number
+      value: 10
+    task_name: Задача А
+    username2:
+      hint: Введите имя пользователя
+      type: string
+      value: user123
