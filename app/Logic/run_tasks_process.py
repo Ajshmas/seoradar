@@ -1,8 +1,8 @@
-# app/Logic/run_tasks_process.py
+# Logic/run_tasks_process.py
 
 import logging
-from app.design.TaskManager import TaskManager
 from logging.handlers import QueueHandler
+from app.design.TaskManager import TaskManager
 
 
 def execute_tasks_process(tasks, process_number, log_queue):
@@ -17,7 +17,7 @@ def execute_tasks_process(tasks, process_number, log_queue):
     handler = QueueHandler(log_queue)
     logger = logging.getLogger()
     logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)  # Устанавливаем нужный уровень
 
     # Логируем начало выполнения задач
     logger.info(f"Процесс {process_number}: начал выполнение задач.")
@@ -34,7 +34,7 @@ def execute_tasks_process(tasks, process_number, log_queue):
 
             # Выполнение задачи
             task_manager.execute_task(
-                localized_task_name=task_name, shared_resources=None, thread_number=process_number)
+                localized_task_name=task_name, shared_resources=None, thread_number=process_number, settings=None)
 
             # Логируем завершение каждой задачи
             logger.info(

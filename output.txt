@@ -1,0 +1,2416 @@
+===== main.py =====
+# main.py
+
+import sys
+import logging
+import multiprocessing
+import signal
+from PySide6.QtWidgets import QApplication
+from logging.handlers import QueueHandler
+from app.design.MainWindow import MainWindow
+from app.utils.logger_config import setup_logging, LogEmitter
+
+
+def main():
+    multiprocessing.freeze_support()  # Необходимо для Windows
+
+    # Создание очереди для логирования
+    log_queue = multiprocessing.Queue()
+
+    # Создание эмиттера для логов в GUI
+    log_emitter = LogEmitter()
+
+    # Настройка логирования через централизованный модуль
+    listener = setup_logging(log_queue, log_emitter)
+
+    logging.info("Начало запуска приложения.")
+
+    # Создание QApplication
+    app = QApplication(sys.argv)
+    app.setStyle("Fusion")  # Применение стиля Fusion ко всему приложению
+    logging.info("QApplication создан с применённым стилем Fusion.")
+
+    # Создание и показ главного окна, передача log_queue и log_emitter
+    main_window = MainWindow(log_queue, log_emitter)
+    main_window.show()  # Убедитесь, что окно отображается
+
+    # Обработка сигналов завершения
+
+    def handle_signal(signum, frame):
+        logging.info(f"Получен сигнал завершения: {
+                     signum}. Завершение приложения.")
+        main_window.cleanup()
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, handle_signal)  # Обработка Ctrl+C
+    signal.signal(signal.SIGTERM, handle_signal)  # Обработка SIGTERM
+
+    # Запуск цикла приложения
+    try:
+        sys.exit(app.exec())
+    finally:
+        listener.stop()
+
+
+if __name__ == '__main__':
+    main()
+
+
+===== __init__.py =====
+[Файл пустой]
+
+
+===== design/ =====
+
+===== design\ControlPanel.py =====
+# app/design/ControlPanel.py
+
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QLabel
+from PySide6.QtCore import Qt
+import logging
+
+
+class ControlPanel(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        logging.debug("ControlPanel: Инициализация.")
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QHBoxLayout(self)
+        layout.setSpacing(10)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        # Создание кнопок
+        self.start_button = QPushButton("Старт")
+        self.stop_button = QPushButton("Стоп")
+        self.pause_button = QPushButton("Пауза")
+        self.resume_button = QPushButton("Возобновить")
+
+        # Настройка размера кнопок
+        self.start_button.setFixedHeight(30)
+        self.stop_button.setFixedHeight(30)
+        self.pause_button.setFixedHeight(30)
+        self.resume_button.setFixedHeight(30)
+
+        # Добавление кнопок в макет
+        layout.addWidget(self.start_button)
+        layout.addWidget(self.stop_button)
+        layout.addWidget(self.pause_button)
+        layout.addWidget(self.resume_button)
+
+        # Добавление разделителя
+        layout.addStretch()
+
+        # Добавление QLabel для отображения статуса
+        self.status_label = QLabel("Статус: Остановлено")
+        self.status_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.status_label)
+
+        self.setLayout(layout)
+        logging.debug("ControlPanel: Интерфейс инициализирован.")
+
+    def update_buttons_on_start(self):
+        self.start_button.setEnabled(False)
+        self.stop_button.setEnabled(True)
+        self.pause_button.setEnabled(True)
+        self.resume_button.setEnabled(False)
+        logging.debug("ControlPanel: Кнопки обновлены после запуска.")
+
+    def update_buttons_on_stop(self):
+        self.start_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
+        self.pause_button.setEnabled(False)
+        self.resume_button.setEnabled(False)
+        logging.debug("ControlPanel: Кнопки обновлены после остановки.")
+
+    def update_buttons_on_pause(self):
+        self.pause_button.setEnabled(False)
+        self.resume_button.setEnabled(True)
+        logging.debug("ControlPanel: Кнопки обновлены после паузы.")
+
+    def update_buttons_on_resume(self):
+        self.pause_button.setEnabled(True)
+        self.resume_button.setEnabled(False)
+        logging.debug("ControlPanel: Кнопки обновлены после возобновления.")
+
+    def update_buttons_on_completed(self):
+        self.start_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
+        self.pause_button.setEnabled(False)
+        self.resume_button.setEnabled(False)
+        logging.debug(
+            "ControlPanel: Кнопки обновлены после завершения всех процессов.")
+
+    def update_status(self, status_message):
+        """
+        Обновляет текст статуса.
+        """
+        self.status_label.setText(f"Статус: {status_message}")
+        logging.debug(f"ControlPanel: Статус обновлён на '{status_message}'.")
+
+
+===== design\IconManager.py =====
+# app/design/IconManager.py
+
+from PySide6.QtGui import QIcon, QPixmap, QColor, QPainter, Qt
+from PySide6.QtCore import QSize
+
+
+class IconManager:
+    @staticmethod
+    def create_icon(style_pixmap, color):
+        """
+        Создает иконку с заданным стилем и цветом.
+
+        :param style_pixmap: Стандартный QStyle.StandardPixmap.
+        :param color: QColor для окраски иконки.
+        :return: QIcon.
+        """
+        pixmap = QPixmap(32, 32)
+        pixmap.fill(Qt.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setBrush(color)
+        painter.setPen(Qt.NoPen)
+
+        # Рисуем стандартный значок
+        icon = QIcon.fromTheme(str(style_pixmap))
+        if not icon.isNull():
+            icon.paint(painter, pixmap.rect())
+        else:
+            # Если значок не найден, рисуем простой круг
+            painter.drawEllipse(pixmap.rect())
+
+        painter.end()
+        return QIcon(pixmap)
+
+
+===== design\MainWindow.py =====
+# app/design/MainWindow.py
+
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QMessageBox, QFileDialog, QMenuBar
+)
+from PySide6.QtGui import QAction  # Исправленный импорт QAction из PySide6.QtGui
+from PySide6.QtCore import Qt
+import logging
+import yaml
+import os
+import re  # Добавляем модуль регулярных выражений
+from datetime import datetime  # Добавляем импорт datetime
+
+from app.design.ControlPanel import ControlPanel
+from app.design.TaskManager import TaskManager
+from app.design.Panel2 import Panel2
+from app.Logic.LogicThread import LogicThread
+
+
+class MainWindow(QWidget):
+    def __init__(self, log_queue, log_emitter):
+        super().__init__()
+        try:
+            logging.debug("Инициализация MainWindow начата.")
+            self.log_queue = log_queue
+            self.log_emitter = log_emitter
+
+            self.setWindowTitle("SEORADAR")
+            self.setGeometry(100, 100, 1000, 700)
+
+            # Инициализация интерфейса
+            layout = QVBoxLayout(self)
+
+            # Добавление меню
+            self.menu_bar = QMenuBar(self)
+            file_menu = self.menu_bar.addMenu("Файл")
+
+            save_config_action = QAction("Сохранить конфиг", self)
+            save_config_action.triggered.connect(self.save_config)
+            file_menu.addAction(save_config_action)
+
+            save_config_as_action = QAction("Сохранить конфиг как", self)
+            save_config_as_action.triggered.connect(self.save_config_as)
+            file_menu.addAction(save_config_as_action)
+
+            load_config_action = QAction("Сменить конфиг", self)
+            load_config_action.triggered.connect(self.load_config)
+            file_menu.addAction(load_config_action)
+
+            reset_config_action = QAction("Сбросить конфиг", self)
+            reset_config_action.triggered.connect(self.reset_config)
+            file_menu.addAction(reset_config_action)
+
+            layout.setMenuBar(self.menu_bar)
+
+            # Добавляем ControlPanel в самом верху
+            self.control_panel = ControlPanel()
+            layout.addWidget(self.control_panel)
+            logging.debug("ControlPanel добавлен в MainWindow.")
+
+            # Инициализация TaskManager
+            self.task_manager = TaskManager(
+                tasks_directory="app/tasks", log_helper=None)
+            logging.debug("TaskManager инициализирован.")
+
+            # Создание Panel2, которая содержит вкладки
+            self.panel2 = Panel2(
+                tasks_directory="app/tasks",
+                task_manager=self.task_manager,
+                log_emitter=self.log_emitter
+            )
+            logging.debug("Panel2 инициализирован.")
+
+            # Добавление Panel2 в основной макет
+            layout.addWidget(self.panel2)
+            logging.debug("Panel2 добавлен в MainWindow.")
+
+            # Убедимся, что папка Configs существует
+            self.configs_dir = os.path.join(os.getcwd(), 'Configs')
+            if not os.path.exists(self.configs_dir):
+                os.makedirs(self.configs_dir)
+                logging.info(f"Создана папка конфигураций: {self.configs_dir}")
+
+            # Инициализация LogicThread как None
+            self.logic_thread = None
+
+            # Подключение кнопок управления
+            self.control_panel.start_button.clicked.connect(
+                self.start_logic_thread)
+            self.control_panel.stop_button.clicked.connect(
+                self.stop_logic_thread)
+            self.control_panel.pause_button.clicked.connect(
+                self.pause_logic_thread)
+            self.control_panel.resume_button.clicked.connect(
+                self.resume_logic_thread)
+
+            logging.debug("MainWindow успешно инициализирован.")
+
+            # Загрузка конфигурации, если есть
+            self.load_actual_config()
+
+            # Подключение сигналов логирования через LogEmitter
+            self.log_emitter.new_log.connect(self.panel2.update_log_output)
+
+        except Exception as e:
+            logging.error(f"Ошибка при инициализации MainWindow: {e}")
+            QMessageBox.critical(
+                self, "Ошибка", f"Ошибка при инициализации MainWindow: {e}")
+
+    def start_logic_thread(self):
+        if self.logic_thread and self.logic_thread.isRunning():
+            QMessageBox.warning(self, "Предупреждение",
+                                "LogicThread уже запущен.")
+            logging.warning(
+                "Попытка запустить LogicThread, но он уже запущен.")
+            return
+
+        selected_tasks = self.get_selected_tasks()
+        if not selected_tasks:
+            QMessageBox.warning(self, "Предупреждение",
+                                "Выберите хотя бы одну задачу для запуска.")
+            logging.warning(
+                "Попытка запустить LogicThread без выбранных задач.")
+            return
+
+        # Сохраняем текущие настройки в конфиг перед запуском
+        self.save_config()  # Сохраняем настройки в файл Actual.yaml
+
+        # Извлекаем только имена задач
+        task_names = [task[1]
+                      for task in selected_tasks]  # берем только имя задачи
+
+        # Получаем настройки из SettingsTab через Panel2
+        try:
+            settings_tab = self.panel2.settings_tab
+            thread_count = settings_tab.processes_input.value()
+            mode = settings_tab.execution_mode_input.currentText()
+            if mode == "Ограничение":
+                execution_count = settings_tab.execution_count_input.value()
+            else:
+                execution_count = float('inf')  # Для бесконечного режима
+        except AttributeError as e:
+            thread_count = 5
+            mode = "Ограничение"
+            execution_count = 10
+            logging.warning(
+                f"Не удалось получить настройки из Panel2. Используются значения по умолчанию. Ошибка: {e}")
+
+        logging.debug(f"Запуск LogicThread с thread_count={thread_count}, mode={
+                      mode}, execution_count={execution_count}")
+
+        # Создаём и запускаем LogicThread
+        self.logic_thread = LogicThread(
+            thread_count=thread_count,
+            tasks=task_names,  # Передаем только имена задач
+            task_manager=self.task_manager,
+            mode=mode,
+            execution_count=execution_count,
+            tasks_directory="app/tasks",
+            log_queue=self.log_queue  # Передаём очередь
+        )
+        self.logic_thread.log_signal.connect(self.update_log_output)
+        self.logic_thread.status_signal.connect(
+            self.control_panel.update_status)
+        self.logic_thread.all_executions_completed.connect(
+            self.on_all_executions_completed)
+        self.logic_thread.start()
+
+        # Обновляем состояние кнопок
+        self.control_panel.update_buttons_on_start()
+
+        logging.debug("LogicThread запущен из MainWindow.")
+
+    def stop_logic_thread(self):
+        if self.logic_thread and self.logic_thread.isRunning():
+            self.logic_thread.stop()
+            self.logic_thread.wait()
+            self.logic_thread = None
+            self.control_panel.update_buttons_on_stop()
+            logging.debug("LogicThread остановлен из MainWindow.")
+        else:
+            QMessageBox.information(
+                self, "Информация", "LogicThread не запущен.")
+            logging.info("Попытка остановить LogicThread, но он не запущен.")
+
+    def pause_logic_thread(self):
+        if self.logic_thread and self.logic_thread.isRunning():
+            self.logic_thread.pause()
+            self.control_panel.update_buttons_on_pause()
+            logging.debug("LogicThread приостановлен из MainWindow.")
+        else:
+            QMessageBox.information(
+                self, "Информация", "LogicThread не запущен.")
+            logging.info(
+                "Попытка приостановить LogicThread, но он не запущен.")
+
+    def resume_logic_thread(self):
+        if self.logic_thread and self.logic_thread.isRunning():
+            self.logic_thread.resume()
+            self.control_panel.update_buttons_on_resume()
+            logging.debug("LogicThread возобновлён из MainWindow.")
+        else:
+            QMessageBox.information(
+                self, "Информация", "LogicThread не запущен.")
+            logging.info("Попытка возобновить LogicThread, но он не запущен.")
+
+    def get_selected_tasks(self):
+        """Возвращает список выбранных задач."""
+        try:
+            tasks_tab = self.panel2.tasks_tab
+            return tasks_tab.get_selected_tasks()
+        except IndexError:
+            logging.error("TasksTab не найден в Panel2.")
+            return []
+        except AttributeError:
+            logging.error("TasksTab не имеет метода get_selected_tasks.")
+            return []
+
+    def on_all_executions_completed(self):
+        self.control_panel.update_buttons_on_completed()
+        # Добавляем текущий timestamp
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.update_log_output(
+            timestamp,
+            "INFO",
+            "Все выполнения достигли лимита и завершены."
+        )
+        logging.info("Слот on_all_executions_completed вызван.")
+        QMessageBox.information(
+            self, "Завершено", "Все выполнения достигли лимита и завершены.")
+
+    def update_log_output(self, timestamp, log_type, message):
+        """
+        Обрабатывает входящие лог-сообщения, отображает их в интерфейсе.
+        """
+        # Добавляем лог-сообщение в LogTab через Panel2
+        self.panel2.update_log_output(timestamp, log_type, message)
+
+    def save_config(self):
+        config_data = self.get_current_config()
+        config_file_path = os.path.join(self.configs_dir, 'Actual.yaml')
+        self.save_config_to_file(config_data, config_file_path)
+
+    def save_config_as(self):
+        config_data = self.get_current_config()
+        file_dialog = QFileDialog(self)
+        # Устанавливаем начальный каталог на папку Configs
+        file_path, _ = file_dialog.getSaveFileName(
+            self, "Сохранить конфиг как", self.configs_dir, "YAML files (*.yaml);;All files (*)")
+        if file_path:
+            self.save_config_to_file(config_data, file_path)
+
+    def save_config_to_file(self, config_data, file_path):
+        try:
+            with open(file_path, 'w', encoding='utf-8') as file:
+                yaml.dump(config_data, file,
+                          default_flow_style=False, allow_unicode=True)
+            logging.info(f"Конфигурация сохранена в файл: {file_path}")
+        except Exception as e:
+            logging.error(f"Ошибка при сохранении конфигурации в файл: {e}")
+            QMessageBox.critical(
+                self, "Ошибка", f"Ошибка при сохранении конфигурации в файл: {e}")
+
+    def load_config(self):
+        file_dialog = QFileDialog(self)
+        # Устанавливаем начальный каталог на папку Configs
+        config_file_path, _ = file_dialog.getOpenFileName(
+            self, "Выбрать конфиг", self.configs_dir, "YAML files (*.yaml);;All files (*)")
+        if config_file_path:
+            self._load_config_from_file(config_file_path)
+
+    def reset_config(self):
+        default_config = {
+            "general_settings": {
+                "thread_count": 5,
+                "execution_mode": "Ограничение",
+                "execution_count": 10
+            },
+            "tasks_settings": {}
+        }
+        actual_config_path = os.path.join(self.configs_dir, 'Actual.yaml')
+        self.save_config_to_file(default_config, actual_config_path)
+        self._load_config_from_file(actual_config_path)
+
+    def load_actual_config(self):
+        config_path = os.path.join(self.configs_dir, 'Actual.yaml')
+        if os.path.exists(config_path):
+            self._load_config_from_file(config_path)
+        else:
+            logging.info(
+                "Файл конфигурации не найден, используется стандартная конфигурация.")
+
+    def _load_config_from_file(self, file_path):
+        try:
+            with open(file_path, 'r', encoding='utf-8') as file:
+                config_data = yaml.safe_load(file)
+
+            general_settings = config_data.get("general_settings", {})
+            settings_tab = self.panel2.settings_tab
+            settings_tab.processes_input.setValue(
+                general_settings.get("thread_count", 5))
+            settings_tab.execution_mode_input.setCurrentText(
+                general_settings.get("execution_mode", "Ограничение"))
+            settings_tab.execution_count_input.setValue(
+                general_settings.get("execution_count", 10))
+
+            tasks_settings = config_data.get("tasks_settings", {})
+            tasks_tab = self.panel2.tasks_tab
+            tasks_tab.task_settings = tasks_settings
+            tasks_tab.reload_task_settings_with_ids()
+
+            logging.info(f"Конфигурация загружена из файла: {file_path}")
+        except Exception as e:
+            logging.error(f"Ошибка при загрузке настроек из файла: {e}")
+            QMessageBox.critical(
+                self, "Ошибка", f"Ошибка при загрузке настроек из файла: {e}")
+
+    def get_current_config(self):
+        settings_tab = self.panel2.settings_tab
+        tasks_tab = self.panel2.tasks_tab
+
+        general_settings = {
+            "thread_count": settings_tab.processes_input.value(),
+            "execution_mode": settings_tab.execution_mode_input.currentText(),
+            "execution_count": settings_tab.execution_count_input.value()
+        }
+
+        tasks_settings = tasks_tab.task_settings
+
+        return {
+            "general_settings": general_settings,
+            "tasks_settings": tasks_settings
+        }
+
+    def cleanup(self):
+        if self.logic_thread and self.logic_thread.isRunning():
+            self.logic_thread.stop()
+            self.logic_thread.wait()
+            logging.debug(
+                "LogicThread остановлен во время очистки MainWindow.")
+
+    def closeEvent(self, event):
+        self.cleanup()
+        event.accept()
+
+
+===== design\Panel2.py =====
+# app/design/Panel2.py
+
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QTabWidget
+import logging
+from app.design.LogTab.LogTab import LogTab
+from app.design.SettingsTab import SettingsTab
+from app.design.TasksTab import TasksTab  # Убедитесь, что импорт правильный
+
+
+class Panel2(QWidget):
+    def __init__(self, tasks_directory, task_manager, log_emitter):
+        super().__init__()
+        logging.debug("Инициализация Panel2.")
+        self.tasks_directory = tasks_directory
+        self.task_manager = task_manager
+        self.log_emitter = log_emitter
+
+        layout = QVBoxLayout(self)
+
+        # Создание вкладок
+        self.tabs = QTabWidget()
+        self.log_tab = LogTab()
+        self.settings_tab = SettingsTab()
+        self.tasks_tab = TasksTab(parent=self, task_manager=self.task_manager)
+        # Добавьте другие вкладки по необходимости
+
+        # Добавление вкладок в QTabWidget
+        self.tabs.addTab(self.log_tab, "Логи")
+        self.tabs.addTab(self.settings_tab, "Настройки")
+        self.tabs.addTab(self.tasks_tab, "Задачи")
+        # Добавьте другие вкладки по необходимости
+
+        layout.addWidget(self.tabs)
+        self.setLayout(layout)
+        logging.debug("Panel2 инициализирован с вкладками.")
+
+    def update_log_output(self, timestamp, log_type, message):
+        """
+        Метод для обновления логов во вкладке LogTab.
+        """
+        self.log_tab.add_log(timestamp, log_type, message)
+
+
+===== design\QTextEditLogger.py =====
+# app/design/QTextEditLogger.py
+
+import logging
+import re
+
+
+class QTextEditLogger(logging.Handler):
+    def __init__(self, text_edit):
+        super().__init__()
+        self.text_edit = text_edit
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            # Предполагаем, что сообщение содержит "Процесс {номер}: сообщение"
+            # Если нет, то пытаемся его извлечь из полного сообщения
+            # Пример полного сообщения: "Задача А: Процесс 1 начал выполнение."
+
+            # Используем регулярное выражение для извлечения номера процесса и сообщения
+            pattern = r'Процесс\s+(\d+)\s+(.*)'
+            match = re.search(pattern, msg)
+            if match:
+                process_number = match.group(1)
+                process_message = match.group(2)
+                formatted_message = f"Процесс {
+                    process_number}: {process_message}"
+                self.text_edit.append(formatted_message)
+            else:
+                # Если сообщение не соответствует ожидаемому формату, не выводим его
+                pass
+        except Exception:
+            self.handleError(record)
+
+
+===== design\SettingsTab.py =====
+# app/design/SettingsTab.py
+
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout, QSpinBox, QComboBox
+from PySide6.QtCore import Qt
+import logging
+
+
+class SettingsTab(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        logging.debug("SettingsTab: Инициализация.")
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        # Настройки количества процессов
+        processes_layout = QHBoxLayout()
+        processes_label = QLabel("Количество процессов:")
+        self.processes_input = QSpinBox()
+        self.processes_input.setRange(1, 100)
+        self.processes_input.setValue(5)
+        processes_layout.addWidget(processes_label)
+        processes_layout.addWidget(self.processes_input)
+        processes_layout.addStretch()
+
+        # Настройки режима выполнения
+        mode_layout = QHBoxLayout()
+        mode_label = QLabel("Режим выполнения:")
+        self.execution_mode_input = QComboBox()
+        self.execution_mode_input.addItems(["Ограничение", "Бесконечный"])
+        mode_layout.addWidget(mode_label)
+        mode_layout.addWidget(self.execution_mode_input)
+        mode_layout.addStretch()
+
+        # Настройки количества выполнений (только для режима "Ограничение")
+        execution_count_layout = QHBoxLayout()
+        execution_count_label = QLabel("Количество выполнений:")
+        self.execution_count_input = QSpinBox()
+        self.execution_count_input.setRange(1, 1000)
+        self.execution_count_input.setValue(10)
+        execution_count_layout.addWidget(execution_count_label)
+        execution_count_layout.addWidget(self.execution_count_input)
+        execution_count_layout.addStretch()
+
+        # Добавление всех настроек в макет
+        layout.addLayout(processes_layout)
+        layout.addLayout(mode_layout)
+        layout.addLayout(execution_count_layout)
+
+        # Добавление растяжки для выравнивания
+        layout.addStretch()
+
+        self.setLayout(layout)
+        logging.debug("SettingsTab: Интерфейс инициализирован.")
+
+
+===== design\TaskManager.py =====
+# design/TaskManager.py
+
+import os
+import importlib.util
+import logging
+import yaml  # Импортируем PyYAML
+
+
+class TaskManager:
+    def __init__(self, tasks_directory, log_helper=None):
+        self.tasks_directory = tasks_directory
+        self.log_helper = log_helper
+        self.available_tasks = self.load_available_tasks()
+        logging.debug(f"TaskManager инициализирован с задачами: {
+                      self.available_tasks}")
+
+    def load_available_tasks(self):
+        """
+        Загружает доступные задачи из директории tasks_directory, включая их настройки из config.yaml.
+        """
+        task_names = []
+        self.task_configs = {}  # Словарь для хранения конфигураций задач
+        for task_dir in os.listdir(self.tasks_directory):
+            task_path = os.path.join(self.tasks_directory, task_dir, 'task.py')
+            config_path = os.path.join(
+                self.tasks_directory, task_dir, 'config.yaml')
+            if os.path.isfile(task_path):
+                spec = importlib.util.spec_from_file_location(
+                    "task", task_path)
+                module = importlib.util.module_from_spec(spec)
+                try:
+                    spec.loader.exec_module(module)
+                    task_class = getattr(module, "Task", None)
+                    if task_class:
+                        # Инициализируем экземпляр задачи без аргументов
+                        task_instance = task_class(
+                            shared_resources=None, process_number=None, log_queue=None)
+                        task_name = task_instance.get_task_name()
+                        task_names.append(task_name)
+                        logging.debug(
+                            f"Задача '{task_name}' успешно загружена.")
+
+                        # Загрузка конфигурации, если файл существует
+                        if os.path.isfile(config_path):
+                            with open(config_path, 'r', encoding='utf-8') as config_file:
+                                try:
+                                    config = yaml.safe_load(config_file)
+                                    self.task_configs[task_name] = config
+                                    logging.debug(f"Конфигурация для задачи '{
+                                                  task_name}' загружена.")
+                                except yaml.YAMLError as e:
+                                    logging.error(f"Ошибка при загрузке config.yaml для задачи '{
+                                                  task_name}': {e}")
+                except Exception as e:
+                    logging.error(f"Не удалось загрузить задачу из {
+                                  task_path}: {e}")
+        return task_names
+
+    def get_task_names(self):
+        """
+        Возвращает список доступных задач.
+        """
+        return self.available_tasks
+
+    def get_task_class(self, task_name):
+        """
+        Возвращает класс задачи по её имени.
+        """
+        for task_dir in os.listdir(self.tasks_directory):
+            task_path = os.path.join(self.tasks_directory, task_dir, 'task.py')
+            if os.path.isfile(task_path):
+                spec = importlib.util.spec_from_file_location(
+                    "task", task_path)
+                module = importlib.util.module_from_spec(spec)
+                try:
+                    spec.loader.exec_module(module)
+                    task_class = getattr(module, "Task", None)
+                    if task_class:
+                        task_instance = task_class(
+                            shared_resources=None, process_number=None, log_queue=None)
+                        if task_instance.get_task_name() == task_name:
+                            return task_class
+                except Exception as e:
+                    logging.error(f"Не удалось загрузить задачу '{
+                                  task_name}' из {task_path}: {e}")
+        raise ValueError(f"Задача с именем '{task_name}' не найдена.")
+
+    def get_task_config(self, task_name):
+        """
+        Возвращает конфигурацию задачи по её имени.
+        """
+        return self.task_configs.get(task_name, {})
+
+    def execute_task(self, localized_task_name, shared_resources, thread_number=None, settings=None):
+        """
+        Выполняет задачу по имени с переданными настройками.
+
+        :param localized_task_name: Локализованное имя задачи.
+        :param shared_resources: Общие ресурсы (если нужны).
+        :param thread_number: Номер процесса (для логирования).
+        :param settings: Настройки задачи, полученные из config.yaml.
+        """
+        try:
+            # Получение класса задачи по имени
+            task_class = self.get_task_class(localized_task_name)
+            task_instance = task_class(
+                shared_resources=shared_resources,
+                process_number=thread_number,  # Передаём process_number
+                log_queue=None,  # Убираем, если не используете внутри Task
+                log_helper=self.log_helper,
+                settings=settings  # Передаём настройки
+            )
+
+            task_instance.run()
+        except Exception as e:
+            logging.error(f"TaskManager: Ошибка при выполнении задачи '{
+                          localized_task_name}': {e}")
+            raise
+
+
+===== design\TasksTab.py =====
+# app/design/TasksTab.py
+
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QListWidget, QListWidgetItem, QLabel, QHBoxLayout,
+    QLineEdit, QPushButton, QFileDialog, QSpinBox, QComboBox, QCheckBox
+)
+from PySide6.QtCore import Qt
+import logging
+import yaml
+import os
+import copy
+
+
+class TasksTab(QWidget):
+    def __init__(self, parent=None, task_manager=None):
+        super().__init__(parent)
+        if task_manager is None:
+            logging.error("TasksTab: task_manager не был передан.")
+            raise ValueError("task_manager не может быть None.")
+        self.task_manager = task_manager
+        logging.debug("TasksTab: Инициализация.")
+        self.task_settings = {}  # Хранение настроек для каждой задачи
+        self.init_ui()
+
+    def init_ui(self):
+        main_layout = QHBoxLayout()
+
+        # Первый раздел: Доступные задачи
+        available_widget = QWidget()
+        available_layout = QVBoxLayout(available_widget)
+        available_label = QLabel("Доступные задачи")
+        self.available_list_widget = QListWidget()
+        self.available_list_widget.setSelectionMode(
+            QListWidget.SingleSelection)
+        self.available_list_widget.itemDoubleClicked.connect(
+            self.add_task_via_double_click)
+        available_layout.addWidget(available_label)
+        available_layout.addWidget(self.available_list_widget)
+
+        # Второй раздел: Выбранные задачи
+        selected_widget = QWidget()
+        selected_layout = QVBoxLayout(selected_widget)
+        selected_label = QLabel("Выбранные задачи")
+        self.selected_list_widget = QListWidget()
+        self.selected_list_widget.setSelectionMode(QListWidget.SingleSelection)
+        self.selected_list_widget.itemDoubleClicked.connect(
+            self.remove_task_via_double_click)
+        self.selected_list_widget.setDragEnabled(True)
+        self.selected_list_widget.setAcceptDrops(True)
+        self.selected_list_widget.setDragDropMode(QListWidget.InternalMove)
+        self.selected_list_widget.setDefaultDropAction(Qt.MoveAction)
+        selected_layout.addWidget(selected_label)
+        selected_layout.addWidget(self.selected_list_widget)
+
+        # Третий раздел: Настройки задач
+        settings_widget = QWidget()
+        self.settings_layout = QVBoxLayout(settings_widget)
+        settings_label = QLabel("Настройки задач")
+        self.settings_layout.addWidget(settings_label)
+        self.settings_form = QVBoxLayout()  # Это основной слой для настроек
+        self.settings_layout.addLayout(self.settings_form)
+        self.settings_layout.addStretch()
+
+        # Добавление разделов в основной макет
+        main_layout.addWidget(available_widget)
+        main_layout.addWidget(selected_widget)
+        main_layout.addWidget(settings_widget)
+
+        available_width = self.calculate_max_width(self.available_list_widget)
+        selected_width = self.calculate_max_width(self.selected_list_widget)
+        available_widget.setFixedWidth(available_width + 150)
+        selected_widget.setFixedWidth(selected_width + 150)
+
+        settings_widget.setSizePolicy(
+            settings_widget.sizePolicy().horizontalPolicy(),
+            settings_widget.sizePolicy().verticalPolicy()
+        )
+
+        self.setLayout(main_layout)
+
+        # Заполнение доступных задач
+        self.populate_available_tasks()
+
+        # Подключение слота для изменения выбранных задач
+        self.selected_list_widget.itemSelectionChanged.connect(
+            self.on_selected_tasks_changed)
+
+    def calculate_max_width(self, list_widget):
+        max_width = 0
+        for index in range(list_widget.count()):
+            item = list_widget.item(index)
+            fm = list_widget.fontMetrics()
+            text_width = fm.horizontalAdvance(item.text())
+            if text_width > max_width:
+                max_width = text_width
+        return max_width
+
+    def populate_available_tasks(self):
+        try:
+            available_tasks = self.task_manager.get_task_names()
+            if not available_tasks:
+                logging.warning(
+                    "TasksTab: Нет доступных задач для отображения.")
+            for task_name_localized in available_tasks:
+                item = QListWidgetItem(task_name_localized)
+                self.available_list_widget.addItem(item)
+                logging.debug(
+                    f"Задача '{task_name_localized}' добавлена в TasksTab.")
+        except AttributeError as e:
+            logging.error(f"Ошибка при получении списка задач: {e}")
+
+    def add_task_via_double_click(self, item: QListWidgetItem):
+        task_name = item.text()
+        unique_task_name = f"{
+            task_name} ({self.selected_list_widget.count() + 1})"
+        new_item = QListWidgetItem(unique_task_name)
+
+        # Генерация уникального идентификатора для задачи
+        task_id = len(self.task_settings) + 1
+        new_item.setData(Qt.UserRole, task_id)
+        self.selected_list_widget.addItem(new_item)
+        logging.debug(f"Задача '{unique_task_name}' добавлена в выбранные.")
+
+        # Загружаем настройки для оригинального имени задачи и сохраняем их в словарь
+        base_config = self.task_manager.get_task_config(task_name)
+        # Сохраняем имя задачи в конфигурации, чтобы позже его использовать
+        task_settings_with_name = {
+            'task_name': task_name,
+            **base_config
+        }
+        self.task_settings[task_id] = copy.deepcopy(task_settings_with_name)
+        logging.debug(f"Создана запись настроек для задачи с id={
+                      task_id}: {self.task_settings[task_id]}")
+
+    def remove_task_via_double_click(self, item: QListWidgetItem):
+        row = self.selected_list_widget.row(item)
+        task_name = item.text()
+        task_id = item.data(Qt.UserRole)
+
+        self.selected_list_widget.takeItem(row)
+        if task_id in self.task_settings:
+            del self.task_settings[task_id]
+            logging.debug(
+                f"Задача '{task_name}' и ее настройки (id={task_id}) удалены.")
+
+        self.clear_task_settings()
+
+    def on_selected_tasks_changed(self):
+        current_item = self.selected_list_widget.currentItem()
+        if current_item is not None:
+            task_id = current_item.data(Qt.UserRole)
+            self.current_task_id = task_id
+            logging.debug(f"Настройки текущей задачи (id={task_id}): {
+                          self.task_settings[task_id]}")
+            self.clear_task_settings()
+            self.load_task_settings(task_id)
+
+    def load_task_settings(self, task_id):
+        task_config = self.task_settings.get(task_id, {})
+        if not task_config:
+            logging.info(f"TasksTab: Задача с id={task_id} не имеет настроек.")
+            return
+
+        widget_map = {}
+        for key, params in task_config.items():
+            if key == 'task_name':  # Пропускаем имя задачи, оно не должно быть виджетом
+                continue
+            widget = self.create_widget_for_param(key, params)
+            if widget:
+                widget_map[key] = widget
+                self.settings_form.addLayout(widget)
+
+        for key, widget in widget_map.items():
+            param_type = task_config[key]['type']
+            value = task_config[key].get('value')
+            self.set_widget_value(widget, param_type, value)
+
+    def get_selected_tasks(self):
+        """Возвращает список выбранных задач."""
+        selected_tasks = []
+        for index in range(self.selected_list_widget.count()):
+            item = self.selected_list_widget.item(index)
+            # Получаем id
+            task_id = item.data(Qt.UserRole)
+            # Также получаем имя задачи
+            task_name = item.text().split(
+                ' (')[0]  # Получаем оригинальное имя задачи
+            # Теперь храним id и имя
+            selected_tasks.append((task_id, task_name))
+        return selected_tasks
+
+    def reload_task_settings_with_ids(self):
+        """Метод для перезагрузки выбранных задач с сохранением ID и имен."""
+        self.selected_list_widget.clear()
+        for task_id, task_config in self.task_settings.items():
+            task_name = task_config.get('task_name', 'Неизвестная задача')
+            unique_task_name = f"{task_name} ({task_id})"
+            new_item = QListWidgetItem(unique_task_name)
+            new_item.setData(Qt.UserRole, task_id)
+            self.selected_list_widget.addItem(new_item)
+
+    def create_widget_for_param(self, key, params):
+        layout = QHBoxLayout()
+        label = QLabel(f"{key}:")
+        label.setFixedWidth(150)
+        layout.addWidget(label)
+
+        param_type = params.get('type')
+
+        if param_type == "string":
+            line_edit = QLineEdit()
+            line_edit.textChanged.connect(
+                lambda value, k=key: self.update_task_setting_value(k, value))
+            layout.addWidget(line_edit)
+            return layout
+
+        elif param_type == "number":
+            spin_box = QSpinBox()
+            spin_box.valueChanged.connect(
+                lambda value, k=key: self.update_task_setting_value(k, value))
+            layout.addWidget(spin_box)
+            return layout
+
+        elif param_type == "random_number":
+            min_val = params.get('min', 0)
+            max_val = params.get('max', 100)
+            line_edit = QLineEdit()
+            line_edit.setReadOnly(True)
+            random_btn = QPushButton("Сгенерировать")
+            random_btn.clicked.connect(lambda: self.generate_random_number(
+                line_edit, min_val, max_val, key))
+            layout.addWidget(line_edit)
+            layout.addWidget(random_btn)
+            return layout
+
+        elif param_type == "file":
+            file_layout = QHBoxLayout()
+            line_edit = QLineEdit()
+            line_edit.textChanged.connect(
+                lambda value, k=key: self.update_task_setting_value(k, value))
+            browse_btn = QPushButton("Обзор")
+            browse_btn.clicked.connect(lambda: self.browse_file(line_edit))
+            file_layout.addWidget(line_edit)
+            file_layout.addWidget(browse_btn)
+            layout.addLayout(file_layout)
+            return layout
+
+        elif param_type == "folder":
+            folder_layout = QHBoxLayout()
+            line_edit = QLineEdit()
+            line_edit.textChanged.connect(
+                lambda value, k=key: self.update_task_setting_value(k, value))
+            browse_btn = QPushButton("Обзор")
+            browse_btn.clicked.connect(lambda: self.browse_folder(line_edit))
+            folder_layout.addWidget(line_edit)
+            folder_layout.addWidget(browse_btn)
+            layout.addLayout(folder_layout)
+            return layout
+
+        elif param_type == "list":
+            combo_box = QComboBox()
+            options = params.get('options', [])
+            combo_box.addItems(options)
+            combo_box.currentTextChanged.connect(
+                lambda value, k=key: self.update_task_setting_value(k, value))
+            layout.addWidget(combo_box)
+            return layout
+
+        elif param_type == "checkbox":
+            checkbox = QCheckBox()
+            checkbox.stateChanged.connect(
+                lambda state, k=key: self.update_task_setting_value(k, bool(state)))
+            layout.addWidget(checkbox)
+            return layout
+
+        else:
+            logging.warning(f"TasksTab: Неизвестный тип параметра '{
+                            param_type}' для '{key}'.")
+            return None
+
+    def set_widget_value(self, widget_layout, param_type, value):
+        widget = widget_layout.itemAt(1).widget()  # Получаем виджет
+        if param_type == "string" and isinstance(widget, QLineEdit):
+            widget.setText(value if value else "")
+        elif param_type == "number" and isinstance(widget, QSpinBox):
+            widget.setValue(value if value else 0)
+        elif param_type == "list" and isinstance(widget, QComboBox):
+            # Устанавливаем выбранное значение, если оно есть
+            if isinstance(value, list):
+                # Берем первый элемент, если список не пустой
+                value = value[0] if value else ""
+            widget.setCurrentText(value)
+        elif param_type == "checkbox" and isinstance(widget, QCheckBox):
+            widget.setChecked(value.lower() == "true" if isinstance(
+                value, str) else bool(value))
+
+    def update_task_setting_value(self, key, value):
+        if hasattr(self, 'current_task_id') and self.current_task_id in self.task_settings:
+            self.task_settings[self.current_task_id][key]['value'] = value
+            logging.debug(f"Обновлено значение для задачи с id={
+                          self.current_task_id}: {key} = {value}")
+
+    def generate_random_number(self, line_edit, min_val, max_val, key):
+        import random
+        rand_num = random.randint(min_val, max_val)
+        line_edit.setText(str(rand_num))
+        self.update_task_setting_value(key, rand_num)
+
+    def browse_file(self, line_edit):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Выберите файл", "", "All Files (*)")
+        if file_path:
+            line_edit.setText(file_path)
+
+    def browse_folder(self, line_edit):
+        folder_path = QFileDialog.getExistingDirectory(
+            self, "Выберите папку", "")
+        if folder_path:
+            line_edit.setText(folder_path)
+
+    def clear_task_settings(self):
+        logging.debug("Полная очистка настроек задач")
+        while self.settings_form.count():
+            item = self.settings_form.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+            elif item.layout():
+                self.clear_layout(item.layout())
+
+    def clear_layout(self, layout):
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+            elif item.layout():
+                self.clear_layout(item.layout())
+        layout.deleteLater()
+
+
+===== design\__init__.py =====
+[Файл пустой]
+
+
+===== design\LogTab/ =====
+
+===== design\LogTab\LogFilters.py =====
+# app/design/LogTab/LogFilters.py
+
+from datetime import datetime
+import logging
+
+
+def filter_logs(logs, selected_filter, search_text, start_time, end_time):
+    """
+    Фильтрует список логов по типу, тексту и временным интервалам.
+
+    :param logs: Список логов (словарей с ключами 'timestamp', 'log_type', 'message').
+    :param selected_filter: Выбранный фильтр типа логов (например, "INFO").
+    :param search_text: Текст для поиска в сообщениях логов.
+    :param start_time: Начало временного интервала (datetime.datetime).
+    :param end_time: Конец временного интервала (datetime.datetime).
+    :return: Отфильтрованный список логов.
+    """
+    filtered = []
+    for log in logs:
+        # Фильтрация по типу лога
+        if selected_filter != "Все" and log['log_type'] != selected_filter:
+            continue
+
+        # Фильтрация по тексту поиска
+        if search_text and search_text not in log['message'].lower():
+            continue
+
+        # Фильтрация по времени
+        try:
+            # Предполагается, что временная метка в формате "YYYY-MM-DD HH:MM:SS"
+            log_time = datetime.strptime(log['timestamp'], '%Y-%m-%d %H:%M:%S')
+        except ValueError as e:
+            logging.error(f"Невозможно разобрать временную метку лога: {
+                          log['timestamp']}. Ошибка: {e}")
+            continue  # Пропускаем логи с некорректными временными метками
+
+        if not (start_time <= log_time <= end_time):
+            continue
+
+        # Если лог проходит все фильтры, добавляем его в результат
+        filtered.append(log)
+
+    return filtered
+
+
+===== design\LogTab\LogItemDelegate.py =====
+# app/design/LogTab/LogItemDelegate.py
+
+from PySide6.QtWidgets import QStyledItemDelegate
+from PySide6.QtCore import QSize
+
+
+class LogItemDelegate(QStyledItemDelegate):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.row_height = 18  # Устанавливаем желаемую высоту строки
+
+    def sizeHint(self, option, index):
+        size = super().sizeHint(option, index)
+        size.setHeight(self.row_height)
+        return size
+
+
+===== design\LogTab\LogTab.py =====
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QTextEdit, QFileDialog, QApplication
+from PySide6.QtGui import QKeySequence
+import logging
+
+from .LogTabUI import LogTabUI
+from .LogTabLogic import LogTabLogic
+from .LogTableModel import LogTableModel  # Import the LogTableModel
+
+
+class LogTab(QWidget):
+    MAX_LOGS = 1000  # Максимальное количество логов
+
+    def __init__(self):
+        super().__init__()
+        self.setStyleSheet("background-color: rgb(50, 50, 50);")
+
+        # Initialize the data model
+        self.model = LogTableModel()  # This will store and manage log data
+
+        # Основной макет
+        main_layout = QVBoxLayout()
+
+        # Создаём логику
+        self.logic = LogTabLogic(self)
+
+        # Пробрасываем методы из логики (при необходимости)
+        self.toggle_time_filter = self.logic.toggle_time_filter
+        self.on_filter_changed = self.logic.on_filter_changed
+        self.on_scrollbar_value_changed = self.logic.on_scrollbar_value_changed
+        self.add_log = self.logic.add_log
+        self.save_logs = self.logic.save_logs
+        self.clear_logs = self.logic.clear_logs
+        self.keyPressEvent = self.logic.keyPressEvent
+        self.copy_selected_rows = self.logic.copy_selected_rows
+        self.show_context_menu = self.logic.show_context_menu
+
+        # Инициализируем UI
+        self.ui = LogTabUI(self)
+        self.ui.setup_ui(main_layout)
+
+        # Устанавливаем основной макет
+        self.setLayout(main_layout)
+
+    def add_log(self, timestamp, log_type, message):
+        """
+        Добавляет новый лог в поле текстового вывода.
+        """
+        log_entry = f"{timestamp} [{log_type}] {message}"
+        self.log_output.append(log_entry)
+
+    def save_logs(self):
+        """
+        Сохраняет текущие логи в файл.
+        """
+        try:
+            file_path, _ = QFileDialog.getSaveFileName(
+                self, "Сохранить логи", "", "Text Files (*.txt);;All Files (*)")
+            if file_path:
+                with open(file_path, 'w', encoding='utf-8') as file:
+                    file.write(self.log_output.toPlainText())
+                logging.info("Логи успешно сохранены.")
+        except Exception as e:
+            logging.error(f"Ошибка сохранения логов: {e}")
+
+    def clear_logs(self):
+        """
+        Очищает все логи в текстовом поле.
+        """
+        self.log_output.clear()
+        logging.info("Логи очищены.")
+
+    def keyPressEvent(self, event):
+        """
+        Обрабатывает нажатия клавиш для копирования текста.
+        """
+        if event.matches(QKeySequence.Copy):
+            self.copy_selected_rows()
+        else:
+            super(self.__class__, self).keyPressEvent(event)
+
+    def copy_selected_rows(self):
+        """
+        Копирует выбранный текст в буфер обмена.
+        """
+        clipboard = QApplication.clipboard()
+        clipboard.setText(self.log_output.toPlainText())
+
+
+===== design\LogTab\LogTableModel.py =====
+# app/design/LogTab/LogTableModel.py
+
+from PySide6.QtCore import QAbstractTableModel, Qt
+
+
+class LogTableModel(QAbstractTableModel):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.logs = []
+        self.headers = ["Время", "Тип", "Сообщение"]
+
+    def rowCount(self, parent=None):
+        return len(self.logs)
+
+    def columnCount(self, parent=None):
+        return 3  # Время, Тип, Сообщение
+
+    def data(self, index, role=Qt.DisplayRole):
+        if not index.isValid():
+            return None
+        if index.row() >= len(self.logs) or index.row() < 0:
+            return None
+        log = self.logs[index.row()]
+        if role == Qt.DisplayRole:
+            if index.column() == 0:
+                return log['timestamp']
+            elif index.column() == 1:
+                return log['log_type']
+            elif index.column() == 2:
+                return log['message']
+        return None
+
+    def headerData(self, section, orientation, role=Qt.DisplayRole):
+        if role != Qt.DisplayRole:
+            return None
+        if orientation == Qt.Horizontal:
+            if section < len(self.headers):
+                return self.headers[section]
+        return None
+
+    def update_logs(self, new_logs):
+        self.beginResetModel()
+        self.logs = new_logs
+        self.endResetModel()
+
+    def clear_logs(self):
+        self.beginResetModel()
+        self.logs = []
+        self.endResetModel()
+
+
+===== design\LogTab\LogTabLogic.py =====
+from PySide6.QtCore import Qt, QDateTime, QTimer
+from PySide6.QtWidgets import QApplication, QFileDialog, QMenu
+from PySide6.QtGui import QKeySequence, QClipboard, QAction
+
+from datetime import datetime
+import logging
+
+from .LogFilters import filter_logs
+
+
+class LogTabLogic:
+    def __init__(self, parent):
+        self.parent = parent
+
+        # Хранение всех логов
+        self.all_logs = []  # Инициализация списка всех логов
+        self.pending_logs = []  # Инициализация буфера новых логов
+
+        # Флаг для отслеживания прокрутки пользователя
+        self.user_scrolled_up = False
+
+        # Настройка таймера для обработки буфера логов
+        self.log_timer = QTimer(self.parent)
+        self.log_timer.setInterval(100)  # 100 миллисекунд
+        self.log_timer.timeout.connect(self.process_pending_logs)
+        self.log_timer.start()
+
+        # Таймер для дебаунса вызовов apply_filters
+        self.apply_filters_timer = QTimer()
+        self.apply_filters_timer.setSingleShot(True)
+        self.apply_filters_timer.timeout.connect(self._apply_filters)
+
+    def toggle_time_filter(self):
+        """
+        Переключает состояние фильтра по времени.
+        """
+        is_checked = self.parent.time_filter_button.isChecked()
+        # Обновляем стили и доступность виджетов
+        color = "white" if is_checked else "gray"
+        self.parent.time_filter_label.setStyleSheet(f"color: {color};")
+        self.parent.to_label.setStyleSheet(f"color: {color};")
+        self.parent.start_datetime.setEnabled(is_checked)
+        self.parent.end_datetime.setEnabled(is_checked)
+        self.parent.start_datetime.setStyleSheet(f"color: {color};")
+        self.parent.end_datetime.setStyleSheet(f"color: {color};")
+        # Применяем фильтры
+        self.apply_filters()
+
+    def on_filter_changed(self):
+        """
+        Обработчик изменений фильтров. Используется для дебаунса вызовов apply_filters.
+        """
+        self.apply_filters_timer.start(100)  # Задержка 100 мс
+
+    def on_scrollbar_value_changed(self, value):
+        """
+        Отслеживает, когда пользователь прокручивает текстовое поле.
+        """
+        max_value = self.parent.text_edit.verticalScrollBar().maximum()
+        self.user_scrolled_up = value < max_value
+
+    def add_log(self, timestamp, log_type, message):
+        """
+        Добавляет новый лог в буфер для последующей обработки.
+        """
+        log_entry = {
+            'timestamp': timestamp,
+            'log_type': log_type,
+            'message': message
+        }
+        self.pending_logs.append(log_entry)
+
+    def process_pending_logs(self):
+        """
+        Обрабатывает все логи, добавленные в буфер, и обновляет отображение.
+        """
+        if self.pending_logs:
+            self.all_logs.extend(self.pending_logs)
+            self.pending_logs.clear()
+
+            # Ограничение количества логов
+            if len(self.all_logs) > self.parent.MAX_LOGS:
+                excess_logs = len(self.all_logs) - self.parent.MAX_LOGS
+                del self.all_logs[:excess_logs]
+
+            self.apply_filters()
+
+    def apply_filters(self):
+        """
+        Запускает таймер для применения фильтров с дебаунсом.
+        """
+        self.apply_filters_timer.start(100)  # Задержка 100 мс
+
+    def _apply_filters(self):
+        """
+        Применяет фильтры и обновляет отображение логов.
+        """
+        selected_filter = self.parent.filter_combobox.currentText()
+        search_text = self.parent.search_input.text().lower()
+
+        # Фильтрация временных интервалов
+        if self.parent.time_filter_button.isChecked():
+            start_time = datetime.strptime(
+                self.parent.start_datetime.dateTime().toString("yyyy-MM-dd HH:mm:ss"), "%Y-%m-%d %H:%M:%S")
+            end_time = datetime.strptime(
+                self.parent.end_datetime.dateTime().toString("yyyy-MM-dd HH:mm:ss"), "%Y-%m-%d %H:%M:%S")
+
+            # Проверка временных интервалов
+            if start_time > end_time:
+                logging.error(
+                    "Некорректные временные интервалы: Начало позже конца.")
+                return
+        else:
+            # Если фильтр по времени отключён, установим start_time и end_time так, чтобы охватить все возможные логи
+            start_time = datetime.min
+            end_time = datetime.max
+
+        # Фильтрация логов
+        filtered_logs = filter_logs(
+            self.all_logs, selected_filter, search_text, start_time, end_time)
+
+        # Обновление отображения в QTextEdit
+        self.parent.text_edit.clear()
+        for log in filtered_logs:
+            log_entry = f"[{log['timestamp']}] [{
+                log['log_type']}] {log['message']}\n"
+            self.parent.text_edit.append(log_entry)
+
+        # Используем QTimer.singleShot, чтобы прокрутка произошла после обновления интерфейса
+        def adjust_scrollbar():
+            if not self.user_scrolled_up:
+                self.parent.text_edit.verticalScrollBar().setValue(
+                    self.parent.text_edit.verticalScrollBar().maximum())
+
+        QTimer.singleShot(0, adjust_scrollbar)
+
+    def save_logs(self):
+        """
+        Сохраняет текущие логи в файл.
+        """
+        try:
+            file_path, _ = QFileDialog.getSaveFileName(
+                self.parent, "Сохранить логи", "", "Text Files (*.txt);;All Files (*)")
+            if file_path:
+                with open(file_path, 'w', encoding='utf-8') as file:
+                    for log in self.all_logs:
+                        timestamp_str = log['timestamp']
+                        log_type = log['log_type']
+                        message = log['message']
+                        file.write(
+                            f'"{timestamp_str}","{log_type}","{message}"\n')
+                # Добавляем лог о сохранении
+                current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                logging.info("Логи успешно сохранены.")
+        except Exception as e:
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            logging.error(f"Ошибка сохранения логов: {e}")
+
+    def clear_logs(self):
+        """
+        Очищает все логи.
+        """
+        self.all_logs.clear()
+        self.pending_logs.clear()
+        self.parent.text_edit.clear()  # Очистка текста в QTextEdit
+        # Добавляем лог о очистке
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        logging.info("Логи очищены.")
+
+    def keyPressEvent(self, event):
+        """
+        Обрабатывает нажатия клавиш для копирования выбранных строк.
+        """
+        if event.matches(QKeySequence.Copy):
+            self.copy_selected_rows()
+        else:
+            super(self.parent.__class__, self.parent).keyPressEvent(event)
+
+    def copy_selected_rows(self):
+        """
+        Копирует выбранные строки в буфер обмена.
+        """
+        clipboard = QApplication.clipboard()
+        text = self.parent.text_edit.toPlainText()  # Получаем весь текст
+        clipboard.setText(text)  # Копируем в буфер обмена
+
+    def show_context_menu(self, position):
+        """
+        Отображает контекстное меню для копирования всех логов.
+        """
+        menu = QMenu()
+        copy_action = QAction("Копировать все логи", self.parent)
+        copy_action.triggered.connect(self.copy_selected_rows)
+        menu.addAction(copy_action)
+        menu.exec(self.parent.text_edit.viewport().mapToGlobal(position))
+
+
+===== design\LogTab\LogTabUI.py =====
+from PySide6.QtWidgets import (
+    QVBoxLayout, QGridLayout, QLabel, QComboBox, QPushButton, QDateTimeEdit,
+    QSizePolicy, QHBoxLayout, QLineEdit, QTextEdit, QMenu, QFileDialog
+)
+from PySide6.QtCore import Qt, QDateTime
+from PySide6.QtGui import QKeySequence, QAction
+
+import datetime
+
+
+class LogTabUI:
+    def __init__(self, parent):
+        self.parent = parent
+
+    def setup_ui(self, main_layout):
+        # Верхняя часть: Фильтры и Поиск
+        filter_search_layout = self.create_filter_search_layout()
+        main_layout.addLayout(filter_search_layout)
+
+        # Отображение логов (используем QTextEdit вместо QTableView)
+        self.parent.text_edit = self.create_text_edit()
+        main_layout.addWidget(self.parent.text_edit)
+
+        # Убедитесь, что сохраняются только кнопки для сохранения и очистки логов.
+        save_layout = self.create_save_layout()  # Без лишнего поля
+        main_layout.addLayout(save_layout)
+
+    def create_filter_search_layout(self):
+        """
+        Создаёт макет для фильтров и поиска.
+        """
+        filter_search_layout = QGridLayout()
+        filter_search_layout.setSpacing(10)
+
+        # Фильтр по типу логов
+        self.parent.filter_label = QLabel("Фильтр по типу:")
+        self.parent.filter_label.setStyleSheet("color: white;")
+        self.parent.filter_combobox = QComboBox()
+        self.parent.filter_combobox.addItems(
+            ["Все", "INFO", "ERROR", "DEBUG", "CRITICAL"])
+        self.parent.filter_combobox.setToolTip(
+            "Выберите тип логов для фильтрации.")
+        self.parent.filter_combobox.currentIndexChanged.connect(
+            self.parent.on_filter_changed)
+
+        # Кнопка для включения/отключения фильтрации по времени
+        self.parent.time_filter_button = QPushButton("Фильтр по времени")
+        self.parent.time_filter_button.setCheckable(True)
+        self.parent.time_filter_button.setStyleSheet("""
+            QPushButton {
+                background-color: rgb(70, 70, 70);
+                color: gray;
+                border: 1px solid rgb(100, 100, 100);
+                padding: 5px;
+            }
+            QPushButton:checked {
+                background-color: rgb(100, 100, 100);
+                color: white;
+                border: 2px solid rgb(150, 150, 150);
+            }
+        """)
+        self.parent.time_filter_button.setToolTip(
+            "Включить или отключить фильтрацию логов по временным интервалам."
+        )
+        self.parent.time_filter_button.clicked.connect(
+            self.parent.toggle_time_filter)
+
+        # Фильтр по временным интервалам
+        self.parent.time_filter_label = QLabel("Время от:")
+        self.parent.time_filter_label.setStyleSheet(
+            "color: gray;")  # Изначально серый цвет
+        self.parent.start_datetime = QDateTimeEdit(self.parent)
+        self.parent.start_datetime.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
+        self.parent.start_datetime.setDateTime(
+            QDateTime.currentDateTime().addDays(-1))
+        self.parent.start_datetime.setToolTip(
+            "Начало временного интервала для фильтрации логов.")
+        self.parent.start_datetime.dateTimeChanged.connect(
+            self.parent.on_filter_changed)
+        self.parent.start_datetime.setEnabled(False)  # Изначально отключено
+        self.parent.start_datetime.setStyleSheet("color: gray;")
+        self.parent.start_datetime.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.parent.start_datetime.setMinimumWidth(150)
+
+        self.parent.to_label = QLabel("до:")
+        self.parent.to_label.setStyleSheet("color: gray;")
+        self.parent.end_datetime = QDateTimeEdit(self.parent)
+        self.parent.end_datetime.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
+        self.parent.end_datetime.setDateTime(QDateTime.currentDateTime())
+        self.parent.end_datetime.setToolTip(
+            "Конец временного интервала для фильтрации логов.")
+        self.parent.end_datetime.dateTimeChanged.connect(
+            self.parent.on_filter_changed)
+        self.parent.end_datetime.setEnabled(False)  # Изначально отключено
+        self.parent.end_datetime.setStyleSheet("color: gray;")
+        self.parent.end_datetime.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.parent.end_datetime.setMinimumWidth(150)
+
+        # Настройка выравнивания и отступов
+        self.parent.time_filter_label.setAlignment(
+            Qt.AlignLeft | Qt.AlignVCenter)
+        self.parent.to_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.parent.time_filter_label.setSizePolicy(
+            QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.parent.to_label.setSizePolicy(
+            QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+        # Поле поиска по логам
+        self.parent.search_label = QLabel("Поиск:")
+        self.parent.search_label.setStyleSheet("color: white;")
+        self.parent.search_input = QLineEdit()
+        self.parent.search_input.setPlaceholderText(
+            "Введите текст для поиска...")
+        self.parent.search_input.setToolTip(
+            "Введите текст для поиска в логах.")
+        self.parent.search_input.textChanged.connect(
+            self.parent.on_filter_changed)
+
+        # Создание макетов для меток и полей
+        start_layout = QHBoxLayout()
+        start_layout.setSpacing(5)
+        start_layout.setContentsMargins(5, 0, 5, 0)
+        start_layout.addWidget(self.parent.time_filter_label)
+        start_layout.addWidget(self.parent.start_datetime)
+
+        end_layout = QHBoxLayout()
+        end_layout.setSpacing(5)
+        end_layout.setContentsMargins(5, 0, 5, 0)
+        end_layout.addWidget(self.parent.to_label)
+        end_layout.addWidget(self.parent.end_datetime)
+
+        # Горизонтальный макет для фильтра по времени
+        time_filter_layout = QHBoxLayout()
+        time_filter_layout.setSpacing(10)
+        time_filter_layout.addWidget(self.parent.time_filter_button)
+        time_filter_layout.addLayout(start_layout)
+        time_filter_layout.addLayout(end_layout)
+        time_filter_layout.addStretch()
+
+        # Добавляем виджеты в макет фильтров и поиска
+        filter_search_layout.addWidget(self.parent.filter_label, 0, 0)
+        filter_search_layout.addWidget(self.parent.filter_combobox, 0, 1, 1, 3)
+        filter_search_layout.addLayout(time_filter_layout, 1, 0, 1, 4)
+        filter_search_layout.addWidget(self.parent.search_label, 2, 0)
+        filter_search_layout.addWidget(self.parent.search_input, 2, 1, 1, 3)
+
+        return filter_search_layout  # Возвращаем макет
+
+    def create_text_edit(self):
+        """
+        Создаёт QTextEdit для отображения логов.
+        """
+        text_edit = QTextEdit()
+        text_edit.setReadOnly(True)  # Отключаем редактирование
+        text_edit.setLineWrapMode(QTextEdit.NoWrap)  # Отключаем перенос строк
+        text_edit.setMinimumHeight(200)
+
+        return text_edit
+
+    def create_save_layout(self):
+        """
+        Создаёт макет для кнопок сохранения и очистки логов.
+        """
+        save_layout = QHBoxLayout()
+        self.parent.save_log_button = QPushButton("Сохранить логи")
+        self.parent.save_log_button.setToolTip(
+            "Сохранить текущие логи в файл.")
+        self.parent.save_log_button.clicked.connect(self.parent.save_logs)
+
+        self.parent.clear_log_button = QPushButton("Очистить логи")
+        self.parent.clear_log_button.setToolTip("Очистить все логи.")
+        self.parent.clear_log_button.clicked.connect(self.parent.clear_logs)
+
+        save_layout.addWidget(self.parent.save_log_button)
+        save_layout.addWidget(self.parent.clear_log_button)
+        save_layout.addStretch()
+
+        return save_layout  # Возвращаем макет
+
+
+===== design\LogTab\__init__.py =====
+# app/design/LogTab/__init__.py
+
+from .LogTab import LogTab
+from .LogTabLogic import LogTabLogic
+from .LogTabUI import LogTabUI
+from .LogTableModel import LogTableModel
+from .LogFilters import filter_logs
+from .LogItemDelegate import LogItemDelegate
+
+
+
+===== Logic/ =====
+
+===== Logic\logger_config.p =====
+# app/Logic/log_config.py
+
+import logging
+import logging.handlers
+from PySide6.QtCore import QObject, Signal
+
+
+class LogEmitter(QObject):
+    new_log = Signal(str, str)  # message, log_type
+
+
+class QtLogHandler(logging.Handler):
+    def __init__(self, emitter):
+        super().__init__()
+        self.emitter = emitter
+
+    def emit(self, record):
+        log_entry = self.format(record)
+        self.emitter.new_log.emit(log_entry, record.levelname)
+
+
+def setup_logging(log_queue, log_emitter):
+    """
+    Настраивает систему логирования с использованием QueueHandler и QueueListener.
+
+    :param log_queue: Очередь для передачи лог-записей.
+    :param log_emitter: Объект-эмиттер для передачи логов в GUI.
+    :return: Объект QueueListener.
+    """
+    # Создаём обработчик, который отправляет логи в очередь
+    queue_handler = logging.handlers.QueueHandler(log_queue)
+    queue_handler.setLevel(logging.DEBUG)
+
+    # Создаём форматтер
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    queue_handler.setFormatter(formatter)
+
+    # Получаем корневой логгер и добавляем QueueHandler
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+    root_logger.addHandler(queue_handler)
+
+    # Создаём обработчики для QueueListener
+
+    # Файловый обработчик
+    file_handler = logging.FileHandler('app.log', encoding='utf-8')
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(formatter)
+
+    # Обработчик для LogTab через Qt сигналы
+    qt_handler = QtLogHandler(log_emitter)
+    qt_handler.setLevel(logging.INFO)
+    qt_handler.setFormatter(formatter)
+
+    # Создаём QueueListener
+    listener = logging.handlers.QueueListener(
+        log_queue, file_handler, qt_handler)
+    listener.start()
+
+    return listener
+
+
+===== Logic\LogicThread.py =====
+# Logic/LogicThread.py
+
+from PySide6.QtCore import QThread, Signal
+import logging
+from multiprocessing import Process
+from app.Logic.run_tasks_process import execute_tasks_process
+
+
+class LogicThread(QThread):
+    log_signal = Signal(str, str)  # message, log_type
+    status_signal = Signal(str)
+    all_executions_completed = Signal()
+
+    def __init__(self, thread_count, tasks, task_manager, mode, execution_count, tasks_directory, log_queue):
+        super().__init__()
+        self.thread_count = thread_count  # Максимальное количество процессов
+        self.tasks = tasks  # Список задач для выполнения каждым процессом
+        self.task_manager = task_manager
+        self.mode = mode  # "Ограничение" или "Бесконечный"
+        self.execution_count = execution_count  # Общее количество запусков процессов
+        self.tasks_directory = tasks_directory
+        self.processes = []
+        self._is_running = True
+        self._is_paused = False
+        self.total_executions = 0  # Счётчик запусков процессов
+        self.available_process_numbers = list(
+            range(1, self.thread_count + 1))  # [1,2,3,4]
+        self.process_number_map = {}  # pid -> process_number
+        self.log_queue = log_queue
+
+    def run(self):
+        try:
+            while self._is_running:
+                # Проверка на паузу
+                if self._is_paused:
+                    self.msleep(100)
+                    continue
+
+                # Очистка завершённых процессов
+                for process in self.processes[:]:
+                    if not process.is_alive():
+                        process.join()
+                        self.processes.remove(process)
+                        process_number = self.process_number_map.pop(
+                            process.pid, None)
+                        if process_number:
+                            self.available_process_numbers.append(
+                                process_number)
+                            # Сортируем для назначения наименьшего номера
+                            self.available_process_numbers.sort()
+                            logging.info(self.format_process_message(
+                                process_number, "завершён."))
+
+                # Проверка условий для запуска новых процессов
+                can_launch = False
+                if self.mode == "Бесконечный":
+                    can_launch = True
+                elif self.mode == "Ограничение" and self.total_executions < self.execution_count:
+                    can_launch = True
+
+                if can_launch and len(self.processes) < self.thread_count and self.available_process_numbers:
+                    # Запуск нового процесса
+                    process_number = self.available_process_numbers.pop(
+                        0)  # Назначаем наименьший доступный номер
+                    self.total_executions += 1
+                    p = Process(target=execute_tasks_process, args=(
+                        self.tasks, process_number, self.log_queue))
+                    p.start()
+                    self.processes.append(p)
+                    self.process_number_map[p.pid] = process_number
+                    message = self.format_process_message(
+                        process_number, "запущен для выполнения задач.")
+                    logging.info(message)
+
+                # Проверка завершения всех процессов при режиме "Ограничение"
+                if self.mode == "Ограничение" and self.total_executions >= self.execution_count and not self.processes:
+                    logging.info(
+                        "Достигнут лимит выполнений. LogicThread завершает работу.")
+                    break
+
+                self.msleep(100)  # Небольшая пауза перед следующей проверкой
+
+            # После выхода из цикла, завершаем все процессы
+            self.terminate_all_processes()
+
+        except Exception as e:
+
+            logging.error(f"LogicThread: Произошла ошибка: {e}")
+        finally:
+            logging.info("LogicThread завершил работу.")
+            self.all_executions_completed.emit()
+
+    def should_launch_processes(self):
+        # Логика для проверки условий запуска процессов
+        if self.mode == "Бесконечный":
+            return True
+        elif self.mode == "Ограничение" and self.total_executions < self.execution_count:
+            return True
+        return False
+
+    def execute_task_process(self, tasks, process_number, log_queue):
+        for task in tasks:
+            # Вызываем выполнение задачи
+            logging.info(self.format_process_message(
+                process_number, f"запустил задачу '{task}'."))
+            execute_tasks_process(task, process_number, log_queue)
+
+    def stop(self):
+        self._is_running = False
+        self.resume()  # В случае паузы, чтобы выйти из цикла
+
+        # Принудительно завершить все дочерние процессы
+        self.terminate_all_processes()
+
+    def pause(self):
+        self._is_paused = True
+        self.status_signal.emit("Пауза")
+
+    def resume(self):
+        if self._is_paused:
+            self._is_paused = False
+            self.status_signal.emit("Работает")
+
+    def terminate_all_processes(self):
+        for process in self.processes:
+            if process.is_alive():
+                process.terminate()
+                process.join()
+                process_number = self.process_number_map.pop(process.pid, None)
+                if process_number:
+                    self.available_process_numbers.append(process_number)
+                    self.available_process_numbers.sort()
+                    logging.info(self.format_process_message(
+                        process_number, "принудительно завершён."))
+
+        self.processes.clear()
+
+    def format_process_message(self, process_number, action):
+        """Форматирует сообщение о действии процесса."""
+        return f"Процесс {process_number}: {action}"
+
+
+===== Logic\run_tasks_process.py =====
+# Logic/run_tasks_process.py
+
+import logging
+from logging.handlers import QueueHandler
+from app.design.TaskManager import TaskManager
+
+
+def execute_tasks_process(tasks, process_number, log_queue):
+    """
+    Функция для выполнения списка задач в отдельном процессе.
+
+    :param tasks: Список названий задач для выполнения.
+    :param process_number: Номер процесса для логирования.
+    :param log_queue: Очередь для логирования.
+    """
+    # Настройка логирования для дочернего процесса с использованием QueueHandler
+    handler = QueueHandler(log_queue)
+    logger = logging.getLogger()
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)  # Устанавливаем нужный уровень
+
+    # Логируем начало выполнения задач
+    logger.info(f"Процесс {process_number}: начал выполнение задач.")
+
+    try:
+        # Инициализация TaskManager внутри процесса
+        task_manager = TaskManager(
+            tasks_directory="app/tasks", log_helper=None)
+
+        for task_name in tasks:
+            # Логируем запуск каждой задачи
+            logger.info(
+                f"Процесс {process_number}: запустил задачу '{task_name}'.")
+
+            # Выполнение задачи
+            task_manager.execute_task(
+                localized_task_name=task_name, shared_resources=None, thread_number=process_number, settings=None)
+
+            # Логируем завершение каждой задачи
+            logger.info(
+                f"Процесс {process_number}: завершил выполнение задачи '{task_name}'.")
+
+    except Exception as e:
+        # Логируем ошибку, если задача не завершена
+        logger.error(
+            f"Процесс {process_number}: ошибка выполнения задачи: {e}")
+
+
+===== Logic\SharedResources.py =====
+# app/Logic/SharedResources.py
+
+from PySide6.QtCore import QMutex, QWaitCondition
+
+
+class SharedResources:
+    def __init__(self, logic_thread, mutex, wait_condition, log_function):
+        self.logic_thread = logic_thread
+        self.mutex = mutex
+        self.wait_condition = wait_condition
+        self.log_function = log_function  # Функция для логирования сообщений
+
+
+===== Logic\__init__.py =====
+[Файл пустой]
+
+
+===== tasks/ =====
+
+===== tasks\__init__.py =====
+[Файл пустой]
+
+
+===== tasks\OpenBrowser/ =====
+
+===== tasks\OpenBrowser\config.yaml =====
+username:
+  value: "user123"
+  type: "string"
+  hint: "Введите имя пользователя"
+
+retry_count:
+  value: 5
+  type: "number"
+  hint: "Количество попыток"
+
+session_id:
+  value: null
+  type: "random_number"
+  min: 0
+  max: 5
+  hint: "Сгенерировать случайный ID с диапазоном от 0 до 5"
+
+log_file:
+  value: "C:/Logs/app.log"
+  type: "file"
+  hint: "Укажите путь к файлу логов"
+
+output_directory:
+  value: "C:/Output"
+  type: "folder"
+  hint: "Укажите путь к выходной папке"
+
+supported_formats:
+  value: ["json", "xml", "csv"]
+  type: "list"
+  hint: "Выберите формат"
+  options:
+    - "json"
+    - "xml"
+    - "csv"
+
+check:
+  value: "true"
+  type: "checkbox"
+  hint: "Разрешить выполнение задачи"
+
+===== tasks\OpenBrowser\task.py =====
+# tasks/OpenBrowser/task.py
+
+import logging
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+import time
+import os
+import psutil
+
+
+class Task:
+    def __init__(self, shared_resources, process_number, log_queue, log_helper=None, settings=None):
+        self.shared_resources = shared_resources
+        self.process_number = process_number
+        self.log_queue = log_queue
+        self.log_helper = log_helper
+        self.settings = settings or {}
+        self.driver = None
+        self.process = None
+
+    def get_task_name(self):
+        return "Открыть браузер"
+
+    def run(self):
+
+        try:
+            # Настройка опций для Chrome
+            options = Options()
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            # Настройка режима запуска браузера на основе настроек
+            if self.settings.get('browser_options', {}).get('headless', False):
+                options.headless = True
+            else:
+                options.headless = False
+
+            window_size = self.settings.get(
+                'browser_options', {}).get('window_size', "1920,1080")
+            options.add_argument(f"--window-size={window_size}")
+
+            # Указание путей к Chrome и ChromeDriver
+            chrome_path = os.path.abspath("ChromeApp/Chrome/chrome.exe")
+            chrome_driver_path = os.path.abspath(
+                "ChromeApp/ChromeDriver/chromedriver.exe")
+
+            # Проверка наличия Chrome
+            if not os.path.exists(chrome_path):
+                raise FileNotFoundError(
+                    f"Не найден Chrome по пути: {chrome_path}")
+
+            # Проверка наличия ChromeDriver
+            if not os.path.exists(chrome_driver_path):
+                raise FileNotFoundError(f"Не найден ChromeDriver по пути: {
+                                        chrome_driver_path}")
+
+            # Настройка сервиса для ChromeDriver
+            service = Service(executable_path=chrome_driver_path,
+                              chrome_binary=chrome_path)
+
+            # Инициализация WebDriver
+            self.driver = webdriver.Chrome(service=service, options=options)
+
+            # Сохранение процесса браузера для последующего завершения
+            self.process = psutil.Process(self.driver.service.process.pid)
+
+            logging.info(f"Открыть браузер: Процесс {
+                         self.process_number} запустил браузер.")
+
+            # Открытие пустой вкладки
+            self.driver.get("about:blank")
+            logging.info(f"Открыть браузер: Процесс {
+                         self.process_number} открыл пустую вкладку.")
+
+            # Симуляция работы браузера (можно заменить на реальные действия)
+            time.sleep(5)
+
+        except Exception as e:
+            logging.error(f"Открыть браузер: Процесс {
+                          self.process_number} столкнулся с ошибкой: {e}")
+
+        finally:
+            # Закрытие браузера и завершение процесса
+            if self.driver:
+                try:
+                    self.driver.quit()
+                    logging.info(f"Открыть браузер: Процесс {
+                                 self.process_number} закрыл браузер.")
+
+                except Exception as e:
+                    logging.error(f"Открыть браузер: Процесс {
+                                  self.process_number} не смог закрыть браузер: {e}")
+
+            if self.process and self.process.is_running():
+                try:
+                    self.process.terminate()
+                    self.process.wait(timeout=5)
+                    logging.info(f"Открыть браузер: Процесс {
+                                 self.process_number} завершён.")
+
+                except psutil.NoSuchProcess:
+                    logging.error(f"Открыть браузер: Процесс {
+                                  self.process_number} уже завершён.")
+
+                except psutil.TimeoutExpired:
+                    logging.error(f"Открыть браузер: Процесс {
+                                  self.process_number} не завершился вовремя.")
+
+
+===== tasks\OpenBrowser\__init__.py =====
+[Файл пустой]
+
+
+===== tasks\TaskA/ =====
+
+===== tasks\TaskA\config.yaml =====
+username2:
+  value: "user123"
+  type: "string"
+  hint: "Введите имя пользователя"
+
+retry_count2:
+  value: 5
+  type: "number"
+  hint: "Количество попыток"
+
+
+===== tasks\TaskA\task.py =====
+# tasks/TaskA/task.py
+
+import time
+import logging
+
+
+class Task:
+    def __init__(self, shared_resources, process_number, log_queue, log_helper=None, settings=None):
+        self.shared_resources = shared_resources
+        self.process_number = process_number
+        self.log_queue = log_queue
+        self.log_helper = log_helper
+
+    def get_task_name(self):
+        return "Задача А"
+
+    def run(self):
+
+        # Симуляция выполнения задачи
+        time.sleep(10)
+
+
+===== tasks\TaskA\__init__.py =====
+# app/tasks/TaskA/__init__.py
+from .task import Task
+
+
+
+===== utils/ =====
+
+===== utils\browser_helper.py =====
+# app/utils/browser_helper.py
+
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+import logging
+import psutil
+
+
+class BrowserHelper:
+    def __init__(self):
+        self.driver = None
+        self.process = None
+
+    def start_browser(self):
+        """
+        Запуск браузера и сохранение процесса.
+        """
+        logging.info("Запуск браузера...")
+        options = Options()
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        # Если нужно запустить браузер в фоновом режиме, установите True
+        options.headless = False
+
+        # Убедитесь, что путь корректен
+        service = Service(executable_path="path_to_your_chromedriver")
+
+        self.driver = webdriver.Chrome(service=service, options=options)
+
+        # Сохраняем процесс браузера
+        self.process = psutil.Process(self.driver.service.process.pid)
+        logging.info("Браузер запущен успешно.")
+        return self.driver
+
+    def open_url(self, driver, url):
+        """
+        Открытие страницы в браузере.
+        :param driver: WebDriver экземпляр.
+        :param url: URL страницы для открытия.
+        """
+        if not driver:
+            logging.error("Браузер не запущен!")
+            return
+
+        logging.info(f"Открытие страницы: {url}")
+        driver.get(url)
+        logging.info(f"Страница {url} загружена.")
+
+    def quit_browser(self, driver):
+        """
+        Завершение работы с браузером, закрытие процесса.
+        :param driver: WebDriver экземпляр.
+        """
+        if driver:
+            logging.info("Закрытие браузера...")
+            driver.quit()
+
+            # Убиваем процесс браузера
+            if self.process:
+                try:
+                    logging.info("Завершение процесса браузера...")
+                    self.process.terminate()
+                    self.process.wait(timeout=5)  # Ждем завершения процесса
+                    logging.info("Процесс браузера завершён.")
+                except psutil.NoSuchProcess:
+                    logging.error("Процесс браузера не найден.")
+                except psutil.TimeoutExpired:
+                    logging.error(
+                        "Не удалось завершить процесс браузера вовремя.")
+            else:
+                logging.error("Процесс браузера не найден.")
+        else:
+            logging.error("Браузер не был запущен!")
+
+
+===== utils\logger.py =====
+# app/utils/logger.py
+
+import logging
+
+# Настройка логирования
+logging.basicConfig(level=logging.INFO,
+                    format='%(message)s')
+
+
+def log_task_start(task_name, process_number):
+    """Логирует начало выполнения задачи процессом."""
+    message = f"Процесс {process_number}: запустил {task_name}"
+    logging.info(message)
+
+
+def log_task_end(task_name, process_number):
+    """Логирует завершение выполнения задачи процессом."""
+    message = f"Процесс {
+        process_number}: завершил выполнение задачи {task_name}"
+    logging.info(message)
+
+
+def log_task_error(task_name, process_number, error_message):
+    """Логирует ошибку выполнения задачи процессом."""
+    message = f"Процесс {process_number}: ошибка выполнения задачи {
+        task_name}: {error_message}"
+    logging.error(message)
+
+
+===== utils\logger_config.py =====
+import logging
+import logging.handlers
+from multiprocessing import Queue
+from PySide6.QtCore import QObject, Signal
+from app.utils.qt_log_handler import QtLogHandler
+
+
+class LogEmitter(QObject):
+    new_log = Signal(str, str, str)  # timestamp, log_type, message
+
+
+def setup_logging(log_queue: Queue, log_emitter: LogEmitter):
+    """
+    Настраивает систему логирования с использованием QueueHandler и QueueListener.
+
+    :param log_queue: Очередь для передачи лог-записей.
+    :param log_emitter: Объект-эмиттер для передачи логов в GUI.
+    :return: Объект QueueListener.
+    """
+    # Создаём обработчик, который отправляет логи в очередь
+    queue_handler = logging.handlers.QueueHandler(log_queue)
+    queue_handler.setLevel(logging.DEBUG)
+
+    # Создаём форматтер (он теперь не добавляет лишнюю информацию)
+    formatter = logging.Formatter('%(message)s')
+    queue_handler.setFormatter(formatter)
+
+    # Получаем корневой логгер и добавляем QueueHandler
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+    root_logger.addHandler(queue_handler)
+
+    # Создаём обработчики для QueueListener
+
+    # Файловый обработчик с ротацией
+    file_handler = logging.handlers.RotatingFileHandler(
+        'app.log', maxBytes=10*1024*1024, backupCount=5, encoding='utf-8'
+    )
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(formatter)
+
+    # Обработчик для LogTab через Qt сигналы
+    qt_handler = QtLogHandler(log_emitter)
+    qt_handler.setLevel(logging.INFO)
+    qt_handler.setFormatter(formatter)
+
+    # Создаём QueueListener
+    listener = logging.handlers.QueueListener(
+        log_queue, file_handler, qt_handler, respect_handler_level=True
+    )
+    listener.start()
+
+    return listener
+
+
+===== utils\qt_log_handler.py =====
+import logging
+from datetime import datetime
+
+
+class QtLogHandler(logging.Handler):
+    def __init__(self, emitter):
+        super().__init__()
+        self.emitter = emitter
+
+    def emit(self, record):
+        # Получаем время логирования
+        timestamp = datetime.fromtimestamp(
+            record.created).strftime('%Y-%m-%d %H:%M:%S')
+
+        # Получаем уровень логирования
+        log_type = record.levelname
+
+        # Получаем только само сообщение
+        message = record.getMessage()
+
+        # Передаём время, уровень и сообщение в эмиттер
+        self.emitter.new_log.emit(timestamp, log_type, message)
+
+
+===== utils\__init__.py =====
+[Файл пустой]
+

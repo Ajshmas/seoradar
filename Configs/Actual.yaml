@@ -1,7 +1,7 @@
 general_settings:
-  execution_count: 1
-  execution_mode: Ограничение
-  thread_count: 1
+  execution_count: 9
+  execution_mode: Бесконечный
+  thread_count: 100
 tasks_settings:
   1:
     retry_count2:

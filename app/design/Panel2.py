@@ -8,11 +8,12 @@ from app.design.TasksTab import TasksTab  # Убедитесь, что импо�
 
 
 class Panel2(QWidget):
-    def __init__(self, tasks_directory, task_manager):
+    def __init__(self, tasks_directory, task_manager, log_emitter):
         super().__init__()
         logging.debug("Инициализация Panel2.")
         self.tasks_directory = tasks_directory
         self.task_manager = task_manager
+        self.log_emitter = log_emitter
 
         layout = QVBoxLayout(self)
 
@@ -33,9 +34,8 @@ class Panel2(QWidget):
         self.setLayout(layout)
         logging.debug("Panel2 инициализирован с вкладками.")
 
-    def update_log_output(self, message, log_type):
+    def update_log_output(self, timestamp, log_type, message):
         """
         Метод для обновления логов во вкладке LogTab.
         """
-        self.log_tab.add_log(message, log_type)
-        # Также можно добавить логирование в консоль или другие места
+        self.log_tab.add_log(timestamp, log_type, message)

@@ -1,8 +1,6 @@
-# app/design/LogTab/LogTabUI.py
-
 from PySide6.QtWidgets import (
     QVBoxLayout, QGridLayout, QLabel, QComboBox, QPushButton, QDateTimeEdit,
-    QSizePolicy, QHBoxLayout, QLineEdit, QTableView, QMenu, QFileDialog, QHeaderView
+    QSizePolicy, QHBoxLayout, QLineEdit, QTextEdit, QMenu, QFileDialog
 )
 from PySide6.QtCore import Qt, QDateTime
 from PySide6.QtGui import QKeySequence, QAction
@@ -19,12 +17,12 @@ class LogTabUI:
         filter_search_layout = self.create_filter_search_layout()
         main_layout.addLayout(filter_search_layout)
 
-        # Отображение логов
-        self.parent.table_view = self.create_table_view()
-        main_layout.addWidget(self.parent.table_view)
+        # Отображение логов (используем QTextEdit вместо QTableView)
+        self.parent.text_edit = self.create_text_edit()
+        main_layout.addWidget(self.parent.text_edit)
 
-        # Нижняя часть: Кнопки сохранения и очистки логов
-        save_layout = self.create_save_layout()
+        # Убедитесь, что сохраняются только кнопки для сохранения и очистки логов.
+        save_layout = self.create_save_layout()  # Без лишнего поля
         main_layout.addLayout(save_layout)
 
     def create_filter_search_layout(self):
@@ -39,7 +37,7 @@ class LogTabUI:
         self.parent.filter_label.setStyleSheet("color: white;")
         self.parent.filter_combobox = QComboBox()
         self.parent.filter_combobox.addItems(
-            ["Все", "INFO", "ERROR", "DEBUG", "Без логов"])
+            ["Все", "INFO", "ERROR", "DEBUG", "CRITICAL"])
         self.parent.filter_combobox.setToolTip(
             "Выберите тип логов для фильтрации.")
         self.parent.filter_combobox.currentIndexChanged.connect(
@@ -150,61 +148,16 @@ class LogTabUI:
 
         return filter_search_layout  # Возвращаем макет
 
-    def create_table_view(self):
+    def create_text_edit(self):
         """
-        Создаёт и настраивает QTableView для отображения логов.
+        Создаёт QTextEdit для отображения логов.
         """
-        table_view = QTableView()
-        table_view.setModel(self.parent.model)
-        table_view.setSortingEnabled(True)
+        text_edit = QTextEdit()
+        text_edit.setReadOnly(True)  # Отключаем редактирование
+        text_edit.setLineWrapMode(QTextEdit.NoWrap)  # Отключаем перенос строк
+        text_edit.setMinimumHeight(200)
 
-        # Включаем выделение целых строк и множественное выделение
-        table_view.setSelectionBehavior(QTableView.SelectRows)
-        table_view.setSelectionMode(QTableView.ExtendedSelection)
-
-        # Отключаем перенос слов
-        table_view.setWordWrap(False)
-
-        # Настройки внешнего вида
-        table_view.setStyleSheet("""
-            QTableView {
-                background-color: rgb(30, 30, 30);
-                color: white;
-                font-family: Consolas;
-                font-size: 14px;  /* Уменьшили размер шрифта */
-            }
-            QTableView::item {
-                padding: 1px;  /* Уменьшили отступы внутри ячеек */
-            }
-            QHeaderView::section {
-                background-color: rgb(60, 60, 60);
-                color: white;
-                font-size: 11px;  /* Уменьшили размер шрифта заголовков */
-                padding: 2px;  /* Уменьшили отступы в заголовках */
-            }
-        """)
-
-        # Настройка автоматической подстройки ширины столбцов
-        header = table_view.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # Время
-        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)  # Тип
-        header.setSectionResizeMode(
-            2, QHeaderView.Stretch)           # Сообщение
-
-        # Установка фиксированной высоты строк
-        table_view.verticalHeader().setDefaultSectionSize(18)  # Высота строки в пикселях
-
-        # Добавление контекстного меню
-        table_view.setContextMenuPolicy(Qt.CustomContextMenu)
-        table_view.customContextMenuRequested.connect(
-            self.parent.show_context_menu)
-
-        # Подключение к сигналу изменения позиции скроллбара
-        self.parent.vertical_scrollbar = table_view.verticalScrollBar()
-        self.parent.vertical_scrollbar.valueChanged.connect(
-            self.parent.on_scrollbar_value_changed)
-
-        return table_view  # Возвращаем настроенный QTableView
+        return text_edit
 
     def create_save_layout(self):
         """

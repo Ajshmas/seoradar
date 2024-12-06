@@ -1,4 +1,4 @@
-# app/tasks/TaskA/task.py
+# tasks/TaskA/task.py
 
 import time
 import logging
@@ -15,11 +15,6 @@ class Task:
         return "Задача А"
 
     def run(self):
-        logging.info(f"Задача А: Процесс {
-                     self.process_number} начал выполнение.")
-        print(f"Задача А: Процесс {self.process_number} начал выполнение.")
+
         # Симуляция выполнения задачи
         time.sleep(10)
-        logging.info(f"Задача А: Процесс {
-                     self.process_number} завершил выполнение.")
-        print(f"Задача А: Процесс {self.process_number} завершил выполнение.")

@@ -1,10 +1,8 @@
-# app/design/LogTab/LogTabLogic.py
-
-from PySide6.QtCore import Qt, QDateTime, QTimer, QModelIndex
+from PySide6.QtCore import Qt, QDateTime, QTimer
 from PySide6.QtWidgets import QApplication, QFileDialog, QMenu
 from PySide6.QtGui import QKeySequence, QClipboard, QAction
 
-import datetime
+from datetime import datetime
 import logging
 
 from .LogFilters import filter_logs
@@ -56,18 +54,20 @@ class LogTabLogic:
 
     def on_scrollbar_value_changed(self, value):
         """
-        Отслеживает, когда пользователь прокручивает таблицу вверх.
+        Отслеживает, когда пользователь прокручивает текстовое поле.
         """
-        max_value = self.parent.vertical_scrollbar.maximum()
+        max_value = self.parent.text_edit.verticalScrollBar().maximum()
         self.user_scrolled_up = value < max_value
 
-    def add_log(self, log_message, log_type="INFO"):
+    def add_log(self, timestamp, log_type, message):
         """
         Добавляет новый лог в буфер для последующей обработки.
         """
-        timestamp = datetime.datetime.now()  # Храним datetime объект
-        log_entry = {'timestamp': timestamp,
-                     'log_type': log_type, 'message': log_message}
+        log_entry = {
+            'timestamp': timestamp,
+            'log_type': log_type,
+            'message': message
+        }
         self.pending_logs.append(log_entry)
 
     def process_pending_logs(self):
@@ -100,30 +100,37 @@ class LogTabLogic:
 
         # Фильтрация временных интервалов
         if self.parent.time_filter_button.isChecked():
-            start_time = self.parent.start_datetime.dateTime().toPython()
-            end_time = self.parent.end_datetime.dateTime().toPython()
+            start_time = datetime.strptime(
+                self.parent.start_datetime.dateTime().toString("yyyy-MM-dd HH:mm:ss"), "%Y-%m-%d %H:%M:%S")
+            end_time = datetime.strptime(
+                self.parent.end_datetime.dateTime().toString("yyyy-MM-dd HH:mm:ss"), "%Y-%m-%d %H:%M:%S")
 
             # Проверка временных интервалов
             if start_time > end_time:
-                self.add_log(
-                    "Некорректные временные интервалы: Начало позже конца.", log_type="ERROR")
+                logging.error(
+                    "Некорректные временные интервалы: Начало позже конца.")
                 return
         else:
             # Если фильтр по времени отключён, установим start_time и end_time так, чтобы охватить все возможные логи
-            start_time = datetime.datetime.min
-            end_time = datetime.datetime.max
+            start_time = datetime.min
+            end_time = datetime.max
 
         # Фильтрация логов
         filtered_logs = filter_logs(
             self.all_logs, selected_filter, search_text, start_time, end_time)
 
-        # Обновление модели данных
-        self.parent.model.update_logs(filtered_logs)
+        # Обновление отображения в QTextEdit
+        self.parent.text_edit.clear()
+        for log in filtered_logs:
+            log_entry = f"[{log['timestamp']}] [{
+                log['log_type']}] {log['message']}\n"
+            self.parent.text_edit.append(log_entry)
 
         # Используем QTimer.singleShot, чтобы прокрутка произошла после обновления интерфейса
         def adjust_scrollbar():
             if not self.user_scrolled_up:
-                self.parent.table_view.scrollToBottom()
+                self.parent.text_edit.verticalScrollBar().setValue(
+                    self.parent.text_edit.verticalScrollBar().maximum())
 
         QTimer.singleShot(0, adjust_scrollbar)
 
@@ -137,14 +144,17 @@ class LogTabLogic:
             if file_path:
                 with open(file_path, 'w', encoding='utf-8') as file:
                     for log in self.all_logs:
-                        timestamp_str = log['timestamp'].strftime(
-                            "%Y-%m-%d %H:%M:%S")
+                        timestamp_str = log['timestamp']
+                        log_type = log['log_type']
+                        message = log['message']
                         file.write(
-                            f"{timestamp_str} [{log['log_type']}] {log['message']}\n")
-                self.add_log("Логи успешно сохранены.", log_type="INFO")
+                            f'"{timestamp_str}","{log_type}","{message}"\n')
+                # Добавляем лог о сохранении
+                current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                logging.info("Логи успешно сохранены.")
         except Exception as e:
-            self.add_log(f"Ошибка сохранения логов: {
-                         str(e)}", log_type="ERROR")
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            logging.error(f"Ошибка сохранения логов: {e}")
 
     def clear_logs(self):
         """
@@ -152,8 +162,10 @@ class LogTabLogic:
         """
         self.all_logs.clear()
         self.pending_logs.clear()
-        self.parent.model.clear_logs()
-        self.add_log("Логи очищены.", log_type="INFO")
+        self.parent.text_edit.clear()  # Очистка текста в QTextEdit
+        # Добавляем лог о очистке
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        logging.info("Логи очищены.")
 
     def keyPressEvent(self, event):
         """
@@ -168,49 +180,16 @@ class LogTabLogic:
         """
         Копирует выбранные строки в буфер обмена.
         """
-        indexes = self.parent.table_view.selectionModel().selectedRows()
-        if indexes:
-            indexes = sorted(indexes, key=lambda x: x.row())
-            copied_text = ""
-            # Добавляем заголовки столбцов
-            headers = [self.parent.model.headerData(i, Qt.Horizontal)
-                       for i in range(self.parent.model.columnCount())]
-            copied_text += ','.join(headers) + '\n'
-            for index in indexes:
-                row_data = []
-                for column in range(self.parent.model.columnCount()):
-                    data = self.parent.model.data(
-                        self.parent.model.index(index.row(), column))
-                    # Экранируем запятые и кавычки
-                    data = str(data).replace('"', '""')
-                    row_data.append(f'"{data}"')
-                copied_text += ','.join(row_data) + '\n'
-            # Устанавливаем текст в буфер обмена
-            clipboard = QApplication.clipboard()
-            clipboard.setText(copied_text.strip())
-        else:
-            # Если ничего не выбрано, копируем все данные
-            copied_text = ""
-            headers = [self.parent.model.headerData(i, Qt.Horizontal)
-                       for i in range(self.parent.model.columnCount())]
-            copied_text += ','.join(headers) + '\n'
-            for row in range(self.parent.model.rowCount()):
-                row_data = []
-                for column in range(self.parent.model.columnCount()):
-                    data = self.parent.model.data(
-                        self.parent.model.index(row, column))
-                    data = str(data).replace('"', '""')
-                    row_data.append(f'"{data}"')
-                copied_text += ','.join(row_data) + '\n'
-            clipboard = QApplication.clipboard()
-            clipboard.setText(copied_text.strip())
+        clipboard = QApplication.clipboard()
+        text = self.parent.text_edit.toPlainText()  # Получаем весь текст
+        clipboard.setText(text)  # Копируем в буфер обмена
 
     def show_context_menu(self, position):
         """
-        Отображает контекстное меню для копирования выбранных строк.
+        Отображает контекстное меню для копирования всех логов.
         """
         menu = QMenu()
-        copy_action = QAction("Копировать", self.parent)
+        copy_action = QAction("Копировать все логи", self.parent)
         copy_action.triggered.connect(self.copy_selected_rows)
         menu.addAction(copy_action)
-        menu.exec(self.parent.table_view.viewport().mapToGlobal(position))
+        menu.exec(self.parent.text_edit.viewport().mapToGlobal(position))

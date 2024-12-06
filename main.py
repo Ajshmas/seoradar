@@ -5,8 +5,9 @@ import logging
 import multiprocessing
 import signal
 from PySide6.QtWidgets import QApplication
-from logging.handlers import QueueHandler, QueueListener
+from logging.handlers import QueueHandler
 from app.design.MainWindow import MainWindow
+from app.utils.logger_config import setup_logging, LogEmitter
 
 
 def main():
@@ -15,39 +16,25 @@ def main():
     # Создание очереди для логирования
     log_queue = multiprocessing.Queue()
 
-    # Настройка обработчика для отправки логов в очередь
-    queue_handler = QueueHandler(log_queue)
-    logger = logging.getLogger()
-    logger.addHandler(queue_handler)
-    # Установите уровень логирования по необходимости
-    logger.setLevel(logging.DEBUG)
+    # Создание эмиттера для логов в GUI
+    log_emitter = LogEmitter()
 
-    # Настройка слушателя очереди для записи логов в консоль
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_formatter = logging.Formatter(
-        '%(asctime)s %(levelname)s: %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-    console_handler.setFormatter(console_formatter)
-    listener = QueueListener(log_queue, console_handler)
-    listener.start()
+    # Настройка логирования через централизованный модуль
+    listener = setup_logging(log_queue, log_emitter)
 
     logging.info("Начало запуска приложения.")
-    print("Начало запуска приложения.")
 
     # Создание QApplication
     app = QApplication(sys.argv)
     app.setStyle("Fusion")  # Применение стиля Fusion ко всему приложению
     logging.info("QApplication создан с применённым стилем Fusion.")
-    print("QApplication создан с применённым стилем Fusion.")
 
-    # Создание и показ главного окна, передача log_queue
-    main_window = MainWindow(log_queue)
+    # Создание и показ главного окна, передача log_queue и log_emitter
+    main_window = MainWindow(log_queue, log_emitter)
     main_window.show()  # Убедитесь, что окно отображается
-    logging.info("Главное окно показано.")
-    print("Главное окно показано.")
 
     # Обработка сигналов завершения
+
     def handle_signal(signum, frame):
         logging.info(f"Получен сигнал завершения: {
                      signum}. Завершение приложения.")

@@ -1,4 +1,4 @@
-# app/design/TaskManager.py
+# design/TaskManager.py
 
 import os
 import importlib.util
@@ -110,11 +110,8 @@ class TaskManager:
                 log_helper=self.log_helper,
                 settings=settings  # Передаём настройки
             )
-            logging.info(f"TaskManager: Создан экземпляр '{
-                         localized_task_name}'.")
+
             task_instance.run()
-            logging.info(f"TaskManager: Задача '{
-                         localized_task_name}' выполнена.")
         except Exception as e:
             logging.error(f"TaskManager: Ошибка при выполнении задачи '{
                           localized_task_name}': {e}")

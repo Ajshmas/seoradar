@@ -1,4 +1,4 @@
-# app/tasks/OpenBrowser/task.py
+# tasks/OpenBrowser/task.py
 
 import logging
 from selenium import webdriver
@@ -23,10 +23,7 @@ class Task:
         return "Открыть браузер"
 
     def run(self):
-        logging.info(f"Открыть браузер: Процесс {
-                     self.process_number} начал выполнение с настройками: {self.settings}")
-        print(f"Открыть браузер: Процесс {
-              self.process_number} начал выполнение с настройками: {self.settings}")
+
         try:
             # Настройка опций для Chrome
             options = Options()
@@ -69,15 +66,11 @@ class Task:
 
             logging.info(f"Открыть браузер: Процесс {
                          self.process_number} запустил браузер.")
-            print(f"Открыть браузер: Процесс {
-                  self.process_number} запустил браузер.")
 
             # Открытие пустой вкладки
             self.driver.get("about:blank")
             logging.info(f"Открыть браузер: Процесс {
                          self.process_number} открыл пустую вкладку.")
-            print(f"Открыть браузер: Процесс {
-                  self.process_number} открыл пустую вкладку.")
 
             # Симуляция работы браузера (можно заменить на реальные действия)
             time.sleep(5)
@@ -85,8 +78,7 @@ class Task:
         except Exception as e:
             logging.error(f"Открыть браузер: Процесс {
                           self.process_number} столкнулся с ошибкой: {e}")
-            print(f"Открыть браузер: Процесс {
-                  self.process_number} столкнулся с ошибкой: {e}")
+
         finally:
             # Закрытие браузера и завершение процесса
             if self.driver:
@@ -94,13 +86,10 @@ class Task:
                     self.driver.quit()
                     logging.info(f"Открыть браузер: Процесс {
                                  self.process_number} закрыл браузер.")
-                    print(f"Открыть браузер: Процесс {
-                          self.process_number} закрыл браузер.")
+
                 except Exception as e:
                     logging.error(f"Открыть браузер: Процесс {
                                   self.process_number} не смог закрыть браузер: {e}")
-                    print(f"Открыть браузер: Процесс {
-                          self.process_number} не смог закрыть браузер: {e}")
 
             if self.process and self.process.is_running():
                 try:
@@ -108,20 +97,11 @@ class Task:
                     self.process.wait(timeout=5)
                     logging.info(f"Открыть браузер: Процесс {
                                  self.process_number} завершён.")
-                    print(f"Открыть браузер: Процесс {
-                          self.process_number} завершён.")
+
                 except psutil.NoSuchProcess:
                     logging.error(f"Открыть браузер: Процесс {
                                   self.process_number} уже завершён.")
-                    print(f"Открыть браузер: Процесс {
-                          self.process_number} уже завершён.")
+
                 except psutil.TimeoutExpired:
                     logging.error(f"Открыть браузер: Процесс {
                                   self.process_number} не завершился вовремя.")
-                    print(f"Открыть браузер: Процесс {
-                          self.process_number} не завершился вовремя.")
-
-            logging.info(f"Открыть браузер: Процесс {
-                         self.process_number} завершил выполнение.")
-            print(f"Открыть браузер: Процесс {
-                  self.process_number} завершил выполнение.")

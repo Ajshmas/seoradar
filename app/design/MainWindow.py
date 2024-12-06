@@ -1,13 +1,16 @@
 # app/design/MainWindow.py
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QMessageBox, QFileDialog, QMenuBar
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QMessageBox, QFileDialog, QMenuBar
+)
+from PySide6.QtGui import QAction  # Исправленный импорт QAction из PySide6.QtGui
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction
-
 import logging
 import yaml
 import os
 import re  # Добавляем модуль регулярных выражений
+from datetime import datetime  # Добавляем импорт datetime
+
 from app.design.ControlPanel import ControlPanel
 from app.design.TaskManager import TaskManager
 from app.design.Panel2 import Panel2
@@ -15,11 +18,12 @@ from app.Logic.LogicThread import LogicThread
 
 
 class MainWindow(QWidget):
-    def __init__(self, log_queue):
+    def __init__(self, log_queue, log_emitter):
         super().__init__()
         try:
             logging.debug("Инициализация MainWindow начата.")
             self.log_queue = log_queue
+            self.log_emitter = log_emitter
 
             self.setWindowTitle("SEORADAR")
             self.setGeometry(100, 100, 1000, 700)
@@ -60,8 +64,11 @@ class MainWindow(QWidget):
             logging.debug("TaskManager инициализирован.")
 
             # Создание Panel2, которая содержит вкладки
-            self.panel2 = Panel2(tasks_directory="app/tasks",
-                                 task_manager=self.task_manager)
+            self.panel2 = Panel2(
+                tasks_directory="app/tasks",
+                task_manager=self.task_manager,
+                log_emitter=self.log_emitter
+            )
             logging.debug("Panel2 инициализирован.")
 
             # Добавление Panel2 в основной макет
@@ -92,11 +99,13 @@ class MainWindow(QWidget):
             # Загрузка конфигурации, если есть
             self.load_actual_config()
 
+            # Подключение сигналов логирования через LogEmitter
+            self.log_emitter.new_log.connect(self.panel2.update_log_output)
+
         except Exception as e:
             logging.error(f"Ошибка при инициализации MainWindow: {e}")
             QMessageBox.critical(
-                self, "Ошибка", f"Произошла ошибка при инициализации интерфейса: {e}")
-            raise
+                self, "Ошибка", f"Ошибка при инициализации MainWindow: {e}")
 
     def start_logic_thread(self):
         if self.logic_thread and self.logic_thread.isRunning():
@@ -113,6 +122,9 @@ class MainWindow(QWidget):
             logging.warning(
                 "Попытка запустить LogicThread без выбранных задач.")
             return
+
+        # Сохраняем текущие настройки в конфиг перед запуском
+        self.save_config()  # Сохраняем настройки в файл Actual.yaml
 
         # Извлекаем только имена задач
         task_names = [task[1]
@@ -193,6 +205,7 @@ class MainWindow(QWidget):
             logging.info("Попытка возобновить LogicThread, но он не запущен.")
 
     def get_selected_tasks(self):
+        """Возвращает список выбранных задач."""
         try:
             tasks_tab = self.panel2.tasks_tab
             return tasks_tab.get_selected_tasks()
@@ -205,82 +218,23 @@ class MainWindow(QWidget):
 
     def on_all_executions_completed(self):
         self.control_panel.update_buttons_on_completed()
+        # Добавляем текущий timestamp
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.update_log_output(
-            "Все выполнения достигли лимита и завершены.", "INFO")
+            timestamp,
+            "INFO",
+            "Все выполнения достигли лимита и завершены."
+        )
         logging.info("Слот on_all_executions_completed вызван.")
         QMessageBox.information(
             self, "Завершено", "Все выполнения достигли лимита и завершены.")
 
-    def update_log_output(self, message, log_type):
+    def update_log_output(self, timestamp, log_type, message):
         """
-        Обрабатывает входящие лог-сообщения, отображает их в интерфейсе,
-        записывает в основной лог и дублирует сообщения процессов в другом формате.
+        Обрабатывает входящие лог-сообщения, отображает их в интерфейсе.
         """
         # Добавляем лог-сообщение в LogTab через Panel2
-        self.panel2.update_log_output(message, log_type)
-
-        # Записываем оригинальное сообщение в лог-файл
-        if log_type.upper() == "ERROR":
-            logging.error(message)
-        elif log_type.upper() == "INFO":
-            logging.info(message)
-        elif log_type.upper() == "DEBUG":
-            logging.debug(message)
-
-        # Дополнительно: дублируем сообщение в другом формате, если оно связано с процессом
-        # Определим несколько шаблонов для разных форматов сообщений процессов
-        process_patterns = [
-            # Шаблон 1: "Процесс <Номер> запущен для выполнения задач."
-            re.compile(
-                r"Процесс\s+(?P<process_number>\d+)\s+(?P<action>.+?)\."),
-
-            # Шаблон 2: "Процесс <Номер>: начал выполнение задач."
-            re.compile(
-                r"Процесс\s+(?P<process_number>\d+):\s+(?P<action>.+?)\."),
-
-            # Шаблон 3: "Процесс <Номер>: запустил задачу 'Задача А'."
-            re.compile(
-                r"Процесс\s+(?P<process_number>\d+):\s+(?P<action>.+?)\s+задачу\s+'(?P<task_name>.+?)'\.")
-        ]
-
-        for pattern in process_patterns:
-            match = pattern.search(message)
-            if match:
-                process_number = match.group("process_number")
-                action = match.group("action")
-                task_name = match.group(
-                    "task_name") if "task_name" in match.groupdict() else None
-
-                # Определим преобразование действия, если необходимо
-                # Например, "начал выполнение" -> "запустил"
-                action_mapping = {
-                    "запущен для выполнения задач": "запустил",
-                    "начал выполнение задач": "запустил",
-                    "запустил задачу": "запустил задачу",
-                    "завершил выполнение задач": "завершил",
-                    "приостановил выполнение задач": "приостановил",
-                    "возобновил выполнение задач": "возобновил",
-                    # Добавьте другие преобразования по мере необходимости
-                }
-
-                # Находим соответствующее преобразование
-                transformed_action = action_mapping.get(action, action)
-
-                if task_name:
-                    duplicate_message = f"Процесс {process_number}: {
-                        transformed_action} Задача {task_name}"
-                else:
-                    duplicate_message = f"Процесс {
-                        process_number}: {transformed_action}"
-
-                # Добавляем дублирующее сообщение в LogTab
-                self.panel2.update_log_output(duplicate_message, log_type)
-
-                # Записываем дублирующее сообщение в лог-файл
-                logging.info(duplicate_message)
-
-                # Прекращаем обработку после первого совпадения
-                break
+        self.panel2.update_log_output(timestamp, log_type, message)
 
     def save_config(self):
         config_data = self.get_current_config()

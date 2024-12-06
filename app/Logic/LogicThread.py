@@ -1,4 +1,4 @@
-# app/Logic/LogicThread.py
+# Logic/LogicThread.py
 
 from PySide6.QtCore import QThread, Signal
 import logging
@@ -29,8 +29,6 @@ class LogicThread(QThread):
         self.log_queue = log_queue
 
     def run(self):
-        logging.info("LogicThread начал работу.")
-        self.log_signal.emit("LogicThread начал работу.", "INFO")
         try:
             while self._is_running:
                 # Проверка на паузу
@@ -52,8 +50,6 @@ class LogicThread(QThread):
                             self.available_process_numbers.sort()
                             logging.info(self.format_process_message(
                                 process_number, "завершён."))
-                            self.log_signal.emit(self.format_process_message(
-                                process_number, "завершён."), "INFO")
 
                 # Проверка условий для запуска новых процессов
                 can_launch = False
@@ -75,14 +71,11 @@ class LogicThread(QThread):
                     message = self.format_process_message(
                         process_number, "запущен для выполнения задач.")
                     logging.info(message)
-                    self.log_signal.emit(message, "INFO")
 
                 # Проверка завершения всех процессов при режиме "Ограничение"
                 if self.mode == "Ограничение" and self.total_executions >= self.execution_count and not self.processes:
                     logging.info(
                         "Достигнут лимит выполнений. LogicThread завершает работу.")
-                    self.log_signal.emit(
-                        "Достигнут лимит выполнений. LogicThread завершает работу.", "INFO")
                     break
 
                 self.msleep(100)  # Небольшая пауза перед следующей проверкой
@@ -91,11 +84,9 @@ class LogicThread(QThread):
             self.terminate_all_processes()
 
         except Exception as e:
-            self.log_signal.emit(
-                f"LogicThread: Произошла ошибка: {e}", "ERROR")
+
             logging.error(f"LogicThread: Произошла ошибка: {e}")
         finally:
-            self.log_signal.emit("LogicThread завершил работу.", "INFO")
             logging.info("LogicThread завершил работу.")
             self.all_executions_completed.emit()
 
@@ -112,8 +103,6 @@ class LogicThread(QThread):
             # Вызываем выполнение задачи
             logging.info(self.format_process_message(
                 process_number, f"запустил задачу '{task}'."))
-            self.log_signal.emit(self.format_process_message(
-                process_number, f"запустил задачу '{task}'."), "INFO")
             execute_tasks_process(task, process_number, log_queue)
 
     def stop(self):
@@ -143,8 +132,7 @@ class LogicThread(QThread):
                     self.available_process_numbers.sort()
                     logging.info(self.format_process_message(
                         process_number, "принудительно завершён."))
-                    self.log_signal.emit(self.format_process_message(
-                        process_number, "принудительно завершён."), "INFO")
+
         self.processes.clear()
 
     def format_process_message(self, process_number, action):

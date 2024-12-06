@@ -198,7 +198,6 @@ class TasksTab(QWidget):
             new_item = QListWidgetItem(unique_task_name)
             new_item.setData(Qt.UserRole, task_id)
             self.selected_list_widget.addItem(new_item)
-        logging.info("Выбранные задачи перезагружены с сохранением ID.")
 
     def create_widget_for_param(self, key, params):
         layout = QHBoxLayout()
