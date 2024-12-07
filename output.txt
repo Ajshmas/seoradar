@@ -341,7 +341,7 @@ class MainWindow(QWidget):
         # Создаём и запускаем LogicThread
         self.logic_thread = LogicThread(
             thread_count=thread_count,
-            tasks=task_names,  # Передаем только имена задач
+            tasks=task_names,  # Передаем список задач
             task_manager=self.task_manager,
             mode=mode,
             execution_count=execution_count,
@@ -363,8 +363,9 @@ class MainWindow(QWidget):
     def stop_logic_thread(self):
         if self.logic_thread and self.logic_thread.isRunning():
             self.logic_thread.stop()
-            self.logic_thread.wait()
-            self.logic_thread = None
+            # Удаляем вызов wait(), чтобы избежать блокировки
+            # self.logic_thread.wait()
+            # Обновляем состояние кнопок сразу
             self.control_panel.update_buttons_on_stop()
             logging.debug("LogicThread остановлен из MainWindow.")
         else:
@@ -417,6 +418,8 @@ class MainWindow(QWidget):
         logging.info("Слот on_all_executions_completed вызван.")
         QMessageBox.information(
             self, "Завершено", "Все выполнения достигли лимита и завершены.")
+        # Устанавливаем logic_thread в None
+        self.logic_thread = None
 
     def update_log_output(self, timestamp, log_type, message):
         """
@@ -1568,7 +1571,7 @@ class LogTabUI:
         self.parent.text_edit = self.create_text_edit()
         main_layout.addWidget(self.parent.text_edit)
 
-        # Убедитесь, что сохраняются только кнопки для сохранения и очистки логов.
+        # Убедимся, что сохраняются только кнопки для сохранения и очистки логов.
         save_layout = self.create_save_layout()  # Без лишнего поля
         main_layout.addLayout(save_layout)
 
@@ -1577,16 +1580,19 @@ class LogTabUI:
         Создаёт макет для фильтров и поиска.
         """
         filter_search_layout = QGridLayout()
-        filter_search_layout.setSpacing(10)
+        filter_search_layout.setSpacing(5)  # Уменьшаем отступы
+        filter_search_layout.setContentsMargins(
+            0, 0, 0, 0)  # Убираем все отступы
 
         # Фильтр по типу логов
-        self.parent.filter_label = QLabel("Фильтр по типу:")
+        self.parent.filter_label = QLabel("Тип лога:")
         self.parent.filter_label.setStyleSheet("color: white;")
         self.parent.filter_combobox = QComboBox()
         self.parent.filter_combobox.addItems(
             ["Все", "INFO", "ERROR", "DEBUG", "CRITICAL"])
         self.parent.filter_combobox.setToolTip(
             "Выберите тип логов для фильтрации.")
+        self.parent.filter_combobox.setFixedWidth(120)  # Уменьшаем ширину
         self.parent.filter_combobox.currentIndexChanged.connect(
             self.parent.on_filter_changed)
 
@@ -1599,6 +1605,7 @@ class LogTabUI:
                 color: gray;
                 border: 1px solid rgb(100, 100, 100);
                 padding: 5px;
+                font-size: 10px;  # Уменьшаем размер текста
             }
             QPushButton:checked {
                 background-color: rgb(100, 100, 100);
@@ -1609,6 +1616,8 @@ class LogTabUI:
         self.parent.time_filter_button.setToolTip(
             "Включить или отключить фильтрацию логов по временным интервалам."
         )
+        self.parent.time_filter_button.setFixedHeight(
+            25)  # Уменьшаем высоту кнопки
         self.parent.time_filter_button.clicked.connect(
             self.parent.toggle_time_filter)
 
@@ -1622,13 +1631,11 @@ class LogTabUI:
             QDateTime.currentDateTime().addDays(-1))
         self.parent.start_datetime.setToolTip(
             "Начало временного интервала для фильтрации логов.")
+        self.parent.start_datetime.setFixedWidth(120)  # Уменьшаем ширину
         self.parent.start_datetime.dateTimeChanged.connect(
             self.parent.on_filter_changed)
         self.parent.start_datetime.setEnabled(False)  # Изначально отключено
         self.parent.start_datetime.setStyleSheet("color: gray;")
-        self.parent.start_datetime.setSizePolicy(
-            QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.parent.start_datetime.setMinimumWidth(150)
 
         self.parent.to_label = QLabel("до:")
         self.parent.to_label.setStyleSheet("color: gray;")
@@ -1637,22 +1644,16 @@ class LogTabUI:
         self.parent.end_datetime.setDateTime(QDateTime.currentDateTime())
         self.parent.end_datetime.setToolTip(
             "Конец временного интервала для фильтрации логов.")
+        self.parent.end_datetime.setFixedWidth(120)  # Уменьшаем ширину
         self.parent.end_datetime.dateTimeChanged.connect(
             self.parent.on_filter_changed)
         self.parent.end_datetime.setEnabled(False)  # Изначально отключено
         self.parent.end_datetime.setStyleSheet("color: gray;")
-        self.parent.end_datetime.setSizePolicy(
-            QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.parent.end_datetime.setMinimumWidth(150)
 
         # Настройка выравнивания и отступов
         self.parent.time_filter_label.setAlignment(
             Qt.AlignLeft | Qt.AlignVCenter)
         self.parent.to_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.parent.time_filter_label.setSizePolicy(
-            QSizePolicy.Fixed, QSizePolicy.Fixed)
-        self.parent.to_label.setSizePolicy(
-            QSizePolicy.Fixed, QSizePolicy.Fixed)
 
         # Поле поиска по логам
         self.parent.search_label = QLabel("Поиск:")
@@ -1662,19 +1663,20 @@ class LogTabUI:
             "Введите текст для поиска...")
         self.parent.search_input.setToolTip(
             "Введите текст для поиска в логах.")
+        self.parent.search_input.setFixedWidth(200)  # Уменьшаем ширину
         self.parent.search_input.textChanged.connect(
             self.parent.on_filter_changed)
 
         # Создание макетов для меток и полей
         start_layout = QHBoxLayout()
         start_layout.setSpacing(5)
-        start_layout.setContentsMargins(5, 0, 5, 0)
+        start_layout.setContentsMargins(0, 0, 5, 0)
         start_layout.addWidget(self.parent.time_filter_label)
         start_layout.addWidget(self.parent.start_datetime)
 
         end_layout = QHBoxLayout()
         end_layout.setSpacing(5)
-        end_layout.setContentsMargins(5, 0, 5, 0)
+        end_layout.setContentsMargins(0, 0, 5, 0)
         end_layout.addWidget(self.parent.to_label)
         end_layout.addWidget(self.parent.end_datetime)
 
@@ -1714,10 +1716,14 @@ class LogTabUI:
         self.parent.save_log_button = QPushButton("Сохранить логи")
         self.parent.save_log_button.setToolTip(
             "Сохранить текущие логи в файл.")
+        self.parent.save_log_button.setFixedHeight(
+            25)  # Уменьшаем высоту кнопки
         self.parent.save_log_button.clicked.connect(self.parent.save_logs)
 
         self.parent.clear_log_button = QPushButton("Очистить логи")
         self.parent.clear_log_button.setToolTip("Очистить все логи.")
+        self.parent.clear_log_button.setFixedHeight(
+            25)  # Уменьшаем высоту кнопки
         self.parent.clear_log_button.clicked.connect(self.parent.clear_logs)
 
         save_layout.addWidget(self.parent.save_log_button)
@@ -1807,10 +1813,11 @@ def setup_logging(log_queue, log_emitter):
 ===== Logic\LogicThread.py =====
 # Logic/LogicThread.py
 
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import QThread, Signal, QMutex, QWaitCondition
 import logging
 from multiprocessing import Process
 from app.Logic.run_tasks_process import execute_tasks_process
+import heapq  # Для эффективного управления доступными номерами
 
 
 class LogicThread(QThread):
@@ -1820,131 +1827,120 @@ class LogicThread(QThread):
 
     def __init__(self, thread_count, tasks, task_manager, mode, execution_count, tasks_directory, log_queue):
         super().__init__()
-        self.thread_count = thread_count  # Максимальное количество процессов
-        self.tasks = tasks  # Список задач для выполнения каждым процессом
+        self.thread_count = thread_count  # Максимальное количество параллельных процессов
+        self.tasks = tasks  # Список всех выбранных задач
         self.task_manager = task_manager
         self.mode = mode  # "Ограничение" или "Бесконечный"
         self.execution_count = execution_count  # Общее количество запусков процессов
         self.tasks_directory = tasks_directory
-        self.processes = []
-        self._is_running = True
-        self._is_paused = False
-        self.total_executions = 0  # Счётчик запусков процессов
-        self.available_process_numbers = list(
-            range(1, self.thread_count + 1))  # [1,2,3,4]
-        self.process_number_map = {}  # pid -> process_number
         self.log_queue = log_queue
+        self.processes = {}  # Ключ: Process, Значение: process_number
+        self._is_running = True
+        self.executions_started = 0  # Количество запущенных процессов
+        # Изначально все номера свободны
+        self.available_numbers = list(range(1, self.thread_count + 1))
+        # Превращаем список в мин-кучу для эффективного получения наименьшего номера
+        heapq.heapify(self.available_numbers)
+
+        # Добавляем механизмы паузы
+        self.pause_mutex = QMutex()
+        self.pause_condition = QWaitCondition()
+        self.paused = False
 
     def run(self):
         try:
-            while self._is_running:
-                # Проверка на паузу
-                if self._is_paused:
-                    self.msleep(100)
-                    continue
+            logging.debug(f"LogicThread запущен с thread_count={
+                          self.thread_count}, execution_count={self.execution_count}, mode={self.mode}")
 
-                # Очистка завершённых процессов
-                for process in self.processes[:]:
-                    if not process.is_alive():
-                        process.join()
-                        self.processes.remove(process)
-                        process_number = self.process_number_map.pop(
-                            process.pid, None)
-                        if process_number:
-                            self.available_process_numbers.append(
-                                process_number)
-                            # Сортируем для назначения наименьшего номера
-                            self.available_process_numbers.sort()
-                            logging.info(self.format_process_message(
-                                process_number, "завершён."))
+            while self._is_running and (self.mode == "Бесконечный" or self.executions_started < self.execution_count):
+                # Проверка состояния паузы
+                self.pause_mutex.lock()
+                while self.paused and self._is_running:
+                    self.pause_condition.wait(self.pause_mutex)
+                self.pause_mutex.unlock()
 
-                # Проверка условий для запуска новых процессов
-                can_launch = False
-                if self.mode == "Бесконечный":
-                    can_launch = True
-                elif self.mode == "Ограничение" and self.total_executions < self.execution_count:
-                    can_launch = True
+                # Запуск новых дочерних процессов, если есть свободные номера и не достигнут лимит запусков
+                while self._is_running and self.available_numbers and (self.mode != "Ограничение" or self.executions_started < self.execution_count):
+                    # Назначение порядкового номера
+                    process_number = heapq.heappop(self.available_numbers)
 
-                if can_launch and len(self.processes) < self.thread_count and self.available_process_numbers:
-                    # Запуск нового процесса
-                    process_number = self.available_process_numbers.pop(
-                        0)  # Назначаем наименьший доступный номер
-                    self.total_executions += 1
+                    # Создание и запуск дочернего процесса
                     p = Process(target=execute_tasks_process, args=(
-                        self.tasks, process_number, self.log_queue))
+                        self.tasks.copy(), process_number, self.log_queue))
                     p.start()
-                    self.processes.append(p)
-                    self.process_number_map[p.pid] = process_number
-                    message = self.format_process_message(
-                        process_number, "запущен для выполнения задач.")
-                    logging.info(message)
+                    logging.info(f"Запущен дочерний процесс {
+                                 process_number} с задачами: {self.tasks.copy()}")
 
-                # Проверка завершения всех процессов при режиме "Ограничение"
-                if self.mode == "Ограничение" and self.total_executions >= self.execution_count and not self.processes:
-                    logging.info(
-                        "Достигнут лимит выполнений. LogicThread завершает работу.")
-                    break
+                    # Сохранение процесса и его номера
+                    self.processes[p] = process_number
+                    self.executions_started += 1
 
-                self.msleep(100)  # Небольшая пауза перед следующей проверкой
+                # Проверка завершения процессов
+                for p in list(self.processes.keys()):
+                    if not p.is_alive():
+                        p.join()
+                        finished_number = self.processes.pop(p)
+                        logging.info(f"Дочерний процесс завершился: PID {
+                                     p.pid}, номер процесса: {finished_number}")
 
-            # После выхода из цикла, завершаем все процессы
-            self.terminate_all_processes()
+                        # Освобождение номера процесса
+                        heapq.heappush(self.available_numbers, finished_number)
+
+                        # Если достигнут лимит запусков, и нет активных процессов, завершить работу
+                        if self.mode == "Ограничение" and self.executions_started >= self.execution_count and not self.processes:
+                            logging.info(
+                                "Достигнут лимит выполнений. LogicThread завершает работу.")
+                            self._is_running = False
+                            break
+
+                self.msleep(100)  # Пауза перед следующей проверкой
+
+            # Ожидание завершения всех процессов перед выходом
+            for p, number in self.processes.items():
+                p.join()
+                logging.info(f"Дочерний процесс завершился: PID {
+                             p.pid}, номер процесса: {number}")
+                heapq.heappush(self.available_numbers, number)
+            self.processes.clear()
 
         except Exception as e:
-
             logging.error(f"LogicThread: Произошла ошибка: {e}")
         finally:
+            # Принудительно завершить все процессы при остановке
+            for p, number in self.processes.items():
+                if p.is_alive():
+                    p.terminate()
+                    p.join()
+                    logging.info(f"Дочерний процесс принудительно завершен: PID {
+                                 p.pid}, номер процесса: {number}")
+            self.processes.clear()
             logging.info("LogicThread завершил работу.")
             self.all_executions_completed.emit()
 
-    def should_launch_processes(self):
-        # Логика для проверки условий запуска процессов
-        if self.mode == "Бесконечный":
-            return True
-        elif self.mode == "Ограничение" and self.total_executions < self.execution_count:
-            return True
-        return False
-
-    def execute_task_process(self, tasks, process_number, log_queue):
-        for task in tasks:
-            # Вызываем выполнение задачи
-            logging.info(self.format_process_message(
-                process_number, f"запустил задачу '{task}'."))
-            execute_tasks_process(task, process_number, log_queue)
-
     def stop(self):
         self._is_running = False
-        self.resume()  # В случае паузы, чтобы выйти из цикла
-
-        # Принудительно завершить все дочерние процессы
-        self.terminate_all_processes()
-
-    def pause(self):
-        self._is_paused = True
-        self.status_signal.emit("Пауза")
-
-    def resume(self):
-        if self._is_paused:
-            self._is_paused = False
-            self.status_signal.emit("Работает")
-
-    def terminate_all_processes(self):
-        for process in self.processes:
-            if process.is_alive():
-                process.terminate()
-                process.join()
-                process_number = self.process_number_map.pop(process.pid, None)
-                if process_number:
-                    self.available_process_numbers.append(process_number)
-                    self.available_process_numbers.sort()
-                    logging.info(self.format_process_message(
-                        process_number, "принудительно завершён."))
-
+        # Принудительно завершить все процессы
+        for p, number in self.processes.items():
+            if p.is_alive():
+                p.terminate()
+                p.join()
+                logging.info(f"Дочерний процесс принудительно завершен: PID {
+                             p.pid}, номер процесса: {number}")
         self.processes.clear()
 
-    def format_process_message(self, process_number, action):
-        """Форматирует сообщение о действии процесса."""
-        return f"Процесс {process_number}: {action}"
+    def pause(self):
+        self.pause_mutex.lock()
+        self.paused = True
+        self.pause_mutex.unlock()
+        logging.info("LogicThread приостановлен.")
+
+    def resume(self):
+        self.pause_mutex.lock()
+        if self.paused:
+            self.paused = False
+            self.pause_condition.wakeAll()
+            logging.info("LogicThread возобновлён.")
+        self.pause_mutex.unlock()
 
 
 ===== Logic\run_tasks_process.py =====
@@ -1984,7 +1980,10 @@ def execute_tasks_process(tasks, process_number, log_queue):
 
             # Выполнение задачи
             task_manager.execute_task(
-                localized_task_name=task_name, shared_resources=None, thread_number=process_number, settings=None)
+                localized_task_name=task_name,
+                shared_resources=None,
+                thread_number=process_number,
+                settings=None)
 
             # Логируем завершение каждой задачи
             logger.info(
@@ -1992,8 +1991,7 @@ def execute_tasks_process(tasks, process_number, log_queue):
 
     except Exception as e:
         # Логируем ошибку, если задача не завершена
-        logger.error(
-            f"Процесс {process_number}: ошибка выполнения задачи: {e}")
+        logger.error(f"Процесс {process_number}: ошибка выполнения задач: {e}")
 
 
 ===== Logic\SharedResources.py =====

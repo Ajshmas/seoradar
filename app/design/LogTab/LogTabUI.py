@@ -21,7 +21,7 @@ class LogTabUI:
         self.parent.text_edit = self.create_text_edit()
         main_layout.addWidget(self.parent.text_edit)
 
-        # Убедитесь, что сохраняются только кнопки для сохранения и очистки логов.
+        # Убедимся, что сохраняются только кнопки для сохранения и очистки логов.
         save_layout = self.create_save_layout()  # Без лишнего поля
         main_layout.addLayout(save_layout)
 
@@ -30,16 +30,19 @@ class LogTabUI:
         Создаёт макет для фильтров и поиска.
         """
         filter_search_layout = QGridLayout()
-        filter_search_layout.setSpacing(10)
+        filter_search_layout.setSpacing(5)  # Уменьшаем отступы
+        filter_search_layout.setContentsMargins(
+            0, 0, 0, 0)  # Убираем все отступы
 
         # Фильтр по типу логов
-        self.parent.filter_label = QLabel("Фильтр по типу:")
+        self.parent.filter_label = QLabel("Тип лога:")
         self.parent.filter_label.setStyleSheet("color: white;")
         self.parent.filter_combobox = QComboBox()
         self.parent.filter_combobox.addItems(
             ["Все", "INFO", "ERROR", "DEBUG", "CRITICAL"])
         self.parent.filter_combobox.setToolTip(
             "Выберите тип логов для фильтрации.")
+        self.parent.filter_combobox.setFixedWidth(120)  # Уменьшаем ширину
         self.parent.filter_combobox.currentIndexChanged.connect(
             self.parent.on_filter_changed)
 
@@ -52,6 +55,7 @@ class LogTabUI:
                 color: gray;
                 border: 1px solid rgb(100, 100, 100);
                 padding: 5px;
+                font-size: 10px;  # Уменьшаем размер текста
             }
             QPushButton:checked {
                 background-color: rgb(100, 100, 100);
@@ -62,6 +66,8 @@ class LogTabUI:
         self.parent.time_filter_button.setToolTip(
             "Включить или отключить фильтрацию логов по временным интервалам."
         )
+        self.parent.time_filter_button.setFixedHeight(
+            25)  # Уменьшаем высоту кнопки
         self.parent.time_filter_button.clicked.connect(
             self.parent.toggle_time_filter)
 
@@ -75,13 +81,11 @@ class LogTabUI:
             QDateTime.currentDateTime().addDays(-1))
         self.parent.start_datetime.setToolTip(
             "Начало временного интервала для фильтрации логов.")
+        self.parent.start_datetime.setFixedWidth(120)  # Уменьшаем ширину
         self.parent.start_datetime.dateTimeChanged.connect(
             self.parent.on_filter_changed)
         self.parent.start_datetime.setEnabled(False)  # Изначально отключено
         self.parent.start_datetime.setStyleSheet("color: gray;")
-        self.parent.start_datetime.setSizePolicy(
-            QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.parent.start_datetime.setMinimumWidth(150)
 
         self.parent.to_label = QLabel("до:")
         self.parent.to_label.setStyleSheet("color: gray;")
@@ -90,22 +94,16 @@ class LogTabUI:
         self.parent.end_datetime.setDateTime(QDateTime.currentDateTime())
         self.parent.end_datetime.setToolTip(
             "Конец временного интервала для фильтрации логов.")
+        self.parent.end_datetime.setFixedWidth(120)  # Уменьшаем ширину
         self.parent.end_datetime.dateTimeChanged.connect(
             self.parent.on_filter_changed)
         self.parent.end_datetime.setEnabled(False)  # Изначально отключено
         self.parent.end_datetime.setStyleSheet("color: gray;")
-        self.parent.end_datetime.setSizePolicy(
-            QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.parent.end_datetime.setMinimumWidth(150)
 
         # Настройка выравнивания и отступов
         self.parent.time_filter_label.setAlignment(
             Qt.AlignLeft | Qt.AlignVCenter)
         self.parent.to_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.parent.time_filter_label.setSizePolicy(
-            QSizePolicy.Fixed, QSizePolicy.Fixed)
-        self.parent.to_label.setSizePolicy(
-            QSizePolicy.Fixed, QSizePolicy.Fixed)
 
         # Поле поиска по логам
         self.parent.search_label = QLabel("Поиск:")
@@ -115,19 +113,20 @@ class LogTabUI:
             "Введите текст для поиска...")
         self.parent.search_input.setToolTip(
             "Введите текст для поиска в логах.")
+        self.parent.search_input.setFixedWidth(200)  # Уменьшаем ширину
         self.parent.search_input.textChanged.connect(
             self.parent.on_filter_changed)
 
         # Создание макетов для меток и полей
         start_layout = QHBoxLayout()
         start_layout.setSpacing(5)
-        start_layout.setContentsMargins(5, 0, 5, 0)
+        start_layout.setContentsMargins(0, 0, 5, 0)
         start_layout.addWidget(self.parent.time_filter_label)
         start_layout.addWidget(self.parent.start_datetime)
 
         end_layout = QHBoxLayout()
         end_layout.setSpacing(5)
-        end_layout.setContentsMargins(5, 0, 5, 0)
+        end_layout.setContentsMargins(0, 0, 5, 0)
         end_layout.addWidget(self.parent.to_label)
         end_layout.addWidget(self.parent.end_datetime)
 
@@ -167,10 +166,14 @@ class LogTabUI:
         self.parent.save_log_button = QPushButton("Сохранить логи")
         self.parent.save_log_button.setToolTip(
             "Сохранить текущие логи в файл.")
+        self.parent.save_log_button.setFixedHeight(
+            25)  # Уменьшаем высоту кнопки
         self.parent.save_log_button.clicked.connect(self.parent.save_logs)
 
         self.parent.clear_log_button = QPushButton("Очистить логи")
         self.parent.clear_log_button.setToolTip("Очистить все логи.")
+        self.parent.clear_log_button.setFixedHeight(
+            25)  # Уменьшаем высоту кнопки
         self.parent.clear_log_button.clicked.connect(self.parent.clear_logs)
 
         save_layout.addWidget(self.parent.save_log_button)

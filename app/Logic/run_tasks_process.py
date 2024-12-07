@@ -34,7 +34,10 @@ def execute_tasks_process(tasks, process_number, log_queue):
 
             # Выполнение задачи
             task_manager.execute_task(
-                localized_task_name=task_name, shared_resources=None, thread_number=process_number, settings=None)
+                localized_task_name=task_name,
+                shared_resources=None,
+                thread_number=process_number,
+                settings=None)
 
             # Логируем завершение каждой задачи
             logger.info(
@@ -42,5 +45,7 @@ def execute_tasks_process(tasks, process_number, log_queue):
 
     except Exception as e:
         # Логируем ошибку, если задача не завершена
-        logger.error(
-            f"Процесс {process_number}: ошибка выполнения задачи: {e}")
+        logger.error(f"Процесс {process_number}: ошибка выполнения задач: {e}")
+
+    finally:
+        logger.info(f"Процесс {process_number}: все задачи завершены.")

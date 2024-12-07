@@ -1,15 +1,12 @@
-# app/design/MainWindow.py
-
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QMessageBox, QFileDialog, QMenuBar
 )
-from PySide6.QtGui import QAction  # Исправленный импорт QAction из PySide6.QtGui
+from PySide6.QtGui import QAction
 from PySide6.QtCore import Qt
 import logging
-import yaml
 import os
-import re  # Добавляем модуль регулярных выражений
-from datetime import datetime  # Добавляем импорт datetime
+from datetime import datetime
+import yaml
 
 from app.design.ControlPanel import ControlPanel
 from app.design.TaskManager import TaskManager
@@ -94,13 +91,16 @@ class MainWindow(QWidget):
             self.control_panel.resume_button.clicked.connect(
                 self.resume_logic_thread)
 
-            logging.debug("MainWindow успешно инициализирован.")
+            logging.debug("MainWindow успешно инициализировано.")
 
             # Загрузка конфигурации, если есть
             self.load_actual_config()
 
             # Подключение сигналов логирования через LogEmitter
             self.log_emitter.new_log.connect(self.panel2.update_log_output)
+
+            # Добавляем флаг для отслеживания состояния закрытия
+            self.is_closing = False
 
         except Exception as e:
             logging.error(f"Ошибка при инициализации MainWindow: {e}")
@@ -152,7 +152,7 @@ class MainWindow(QWidget):
         # Создаём и запускаем LogicThread
         self.logic_thread = LogicThread(
             thread_count=thread_count,
-            tasks=task_names,  # Передаем только имена задач
+            tasks=task_names,  # Передаем список задач
             task_manager=self.task_manager,
             mode=mode,
             execution_count=execution_count,
@@ -164,6 +164,7 @@ class MainWindow(QWidget):
             self.control_panel.update_status)
         self.logic_thread.all_executions_completed.connect(
             self.on_all_executions_completed)
+        self.logic_thread.finished.connect(self.on_logic_thread_finished)
         self.logic_thread.start()
 
         # Обновляем состояние кнопок
@@ -171,11 +172,48 @@ class MainWindow(QWidget):
 
         logging.debug("LogicThread запущен из MainWindow.")
 
+    def on_logic_thread_finished(self):
+        """
+        Слот, вызываемый при завершении LogicThread.
+        """
+        self.logic_thread = None
+        logging.debug("LogicThread завершился и был очищен из MainWindow.")
+
+    def on_all_executions_completed(self):
+        if not self.is_closing:
+            self.control_panel.update_buttons_on_completed()
+            # Добавляем текущий timestamp
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self.update_log_output(
+                timestamp,
+                "INFO",
+                "Все выполнения достигли лимита и завершены."
+            )
+            logging.info("Слот on_all_executions_completed вызван.")
+            QMessageBox.information(
+                self, "Завершено", "Все выполнения достигли лимита и завершены.")
+        # Устанавливаем logic_thread в None
+        self.logic_thread = None
+
+    def cleanup(self):
+        self.is_closing = True  # Устанавливаем флаг перед началом очистки
+        if self.logic_thread and self.logic_thread.isRunning():
+            self.logic_thread.stop()
+            self.logic_thread.wait(5000)  # Ждем максимум 5 секунд
+            if self.logic_thread.isRunning():
+                logging.warning(
+                    "LogicThread не завершился вовремя при очистке.")
+            else:
+                logging.debug(
+                    "LogicThread успешно завершился во время очистки.")
+
+    def closeEvent(self, event):
+        self.cleanup()
+        event.accept()
+
     def stop_logic_thread(self):
         if self.logic_thread and self.logic_thread.isRunning():
             self.logic_thread.stop()
-            self.logic_thread.wait()
-            self.logic_thread = None
             self.control_panel.update_buttons_on_stop()
             logging.debug("LogicThread остановлен из MainWindow.")
         else:
@@ -215,19 +253,6 @@ class MainWindow(QWidget):
         except AttributeError:
             logging.error("TasksTab не имеет метода get_selected_tasks.")
             return []
-
-    def on_all_executions_completed(self):
-        self.control_panel.update_buttons_on_completed()
-        # Добавляем текущий timestamp
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.update_log_output(
-            timestamp,
-            "INFO",
-            "Все выполнения достигли лимита и завершены."
-        )
-        logging.info("Слот on_all_executions_completed вызван.")
-        QMessageBox.information(
-            self, "Завершено", "Все выполнения достигли лимита и завершены.")
 
     def update_log_output(self, timestamp, log_type, message):
         """
@@ -333,11 +358,16 @@ class MainWindow(QWidget):
         }
 
     def cleanup(self):
+        self.is_closing = True  # Устанавливаем флаг перед началом очистки
         if self.logic_thread and self.logic_thread.isRunning():
             self.logic_thread.stop()
-            self.logic_thread.wait()
-            logging.debug(
-                "LogicThread остановлен во время очистки MainWindow.")
+            self.logic_thread.wait(5000)  # Ждем максимум 5 секунд
+            if self.logic_thread.isRunning():
+                logging.warning(
+                    "LogicThread не завершился вовремя при очистке.")
+            else:
+                logging.debug(
+                    "LogicThread успешно завершился во время очистки.")
 
     def closeEvent(self, event):
         self.cleanup()
